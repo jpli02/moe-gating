@@ -1,3 +1,44 @@
+Metadata-Version: 2.1
+Name: megablocks
+Version: 0.8.0.dev0
+Summary: MegaBlocks
+Home-page: https://github.com/databricks/megablocks
+Author: Trevor Gale
+Author-email: tgale@stanford.edu
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: Unix
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy<2.1.0,>=1.21.5
+Requires-Dist: packaging<24.2,>=21.3.0
+Requires-Dist: torch<2.5.2,>=2.5.1
+Requires-Dist: triton>=2.1.0
+Requires-Dist: stanford-stk==0.7.1
+Provides-Extra: gg
+Requires-Dist: grouped_gemm==0.1.6; extra == "gg"
+Provides-Extra: dev
+Requires-Dist: absl-py; extra == "dev"
+Requires-Dist: coverage[toml]==7.4.4; extra == "dev"
+Requires-Dist: pytest_codeblocks<0.17,>=0.16.1; extra == "dev"
+Requires-Dist: pytest-cov<5,>=4; extra == "dev"
+Requires-Dist: pytest<8,>=7.2.1; extra == "dev"
+Requires-Dist: pre-commit<4,>=3.4.0; extra == "dev"
+Provides-Extra: testing
+Requires-Dist: mosaicml>=0.24.1; extra == "testing"
+Provides-Extra: all
+Requires-Dist: pytest_codeblocks<0.17,>=0.16.1; extra == "all"
+Requires-Dist: pytest-cov<5,>=4; extra == "all"
+Requires-Dist: absl-py; extra == "all"
+Requires-Dist: grouped_gemm==0.1.6; extra == "all"
+Requires-Dist: pytest<8,>=7.2.1; extra == "all"
+Requires-Dist: coverage[toml]==7.4.4; extra == "all"
+Requires-Dist: pre-commit<4,>=3.4.0; extra == "all"
+
 # :robot: MegaBlocks
 
 MegaBlocks is a light-weight library for mixture-of-experts (MoE) training. The core of the system is efficient "dropless-MoE" ([dMoE](megablocks/layers/dmoe.py), [paper](https://arxiv.org/abs/2211.15841)) and standard [MoE](megablocks/layers/moe.py) layers.
