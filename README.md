@@ -1,3 +1,6 @@
+# Benchmark the megablocks
+python ./megablocks/layers/benchmark.py --top_k 2 --E 256 --S 4096 --HEAD_DIM 128 --bs 1
+
 # :robot: MegaBlocks
 
 MegaBlocks is a light-weight library for mixture-of-experts (MoE) training. The core of the system is efficient "dropless-MoE" ([dMoE](megablocks/layers/dmoe.py), [paper](https://arxiv.org/abs/2211.15841)) and standard [MoE](megablocks/layers/moe.py) layers.
