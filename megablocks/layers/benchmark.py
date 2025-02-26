@@ -324,7 +324,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
                 top_k,
             )
 
-# benchmark gating kernel for megablocks
+# benchmark routing kernel for megablocks
 def run_megablocks(top_k, expert_num, bs, seq_len, hid_dim):
     # x: [sl, bs, hs]
     # expert_weights: [sl * bs, top-k]
@@ -343,42 +343,102 @@ def run_megablocks(top_k, expert_num, bs, seq_len, hid_dim):
         moe_top_k=top_k,
         mlp_impl='sparse' 
     )
-    torch.cuda.reset_peak_memory_stats()
-    start_memory = torch.cuda.memory_allocated()
     model = ParallelDroplessMLP(args).cuda()
     
     # Warm-up 
     for _ in range(10):
         _ = model.indices_and_padded_bins(top_experts)
     
+    #################################################################
+    # teset indices_and_padded_bins
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     start_time = time.time()
-    # torch.cuda.reset_peak_memory_stats()
-    # start_memory = torch.cuda.memory_allocated()
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
     
     indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
-    
     
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
     end_time = time.time()
     
-    
-    
-    print(f"indices shape {indices.shape}")
-    print(f"bin_ids shape {bin_ids.shape}")
-    print(f"bins shape {bins.shape}")
-    print(f"padded_bins shape {padded_bins.shape}")
-    print(f"tokens_per_expert shape {tokens_per_expert.shape}")
+    # print("---------- benchmarking the routing kernel ----------")
+    # print(f"indices shape {indices.shape}")
+    # print(f"bin_ids shape {bin_ids.shape}")
+    # print(f"bins shape {bins.shape}")
+    # print(f"padded_bins shape {padded_bins.shape}")
+    # print(f"tokens_per_expert shape {tokens_per_expert.shape}")
     
     # mem summary
     memory_used = end_memory - start_memory
     peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {end_time - start_time:.6f} seconds")
+    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
     print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    #################################################################
+    
+    #################################################################
+    # teset indices_and_padded_bins
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    start_time = time.time()
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+    
+    # Route the tokens for MoE computation.
+    x = x.view(-1, x.shape[-1])
+    x = ops.padded_gather(
+        x,
+        indices,
+        bin_ids,
+        bins,
+        padded_bins,
+        model.top_k,
+    )
+
+    torch.cuda.synchronize()
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    end_time = time.time()
+    
+    print("---------- benchmarking the dispatching kernel ----------")
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
+    print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    print("-----------------------------------------------------")
+    #################################################################
+    
+    #################################################################
+    # teset indices_and_padded_bins
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    start_time = time.time()
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+
+    # Create the sparse matrix topology.
+    with torch.no_grad():
+        topo = model.topology(x, padded_bins)
+
+    torch.cuda.synchronize()
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    end_time = time.time()
+    
+    print("---------- benchmarking the topo matrix kernel ----------")
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
+    print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    print("-----------------------------------------------------")
+    #################################################################
 
 if __name__ == "__main__":
     # Parse command-line arguments
@@ -393,6 +453,3 @@ if __name__ == "__main__":
     print(f"Arguments: {args}")
     run_megablocks(args.top_k, args.e, args.bs, args.s, args.hid_dim)
 
-
-
-    
