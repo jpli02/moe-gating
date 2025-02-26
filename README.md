@@ -1,5 +1,7 @@
 # Benchmark the megablocks
+```sh
 python ./megablocks/layers/benchmark.py --top_k 2 --E 256 --S 4096 --HEAD_DIM 128 --bs 1
+```
 
 # :robot: MegaBlocks
 
