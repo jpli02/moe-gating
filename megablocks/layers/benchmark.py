@@ -359,7 +359,6 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     for _ in range(10):
         indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
     end_time = time.time()
-    print(f"indices shape {indices.shape}")    
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
