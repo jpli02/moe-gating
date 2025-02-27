@@ -1,6 +1,6 @@
 # Benchmark the megablocks
 ```sh
-python ./megablocks/layers/benchmark.py --top_k 2 --e 256 --s 4096 --him_dim 128 --bs 1
+python ./megablocks/layers/benchmark.py --top_k 2 --e 256 --s 4096 --hid_dim 128 --bs 1
 ```
 
 # :robot: MegaBlocks
