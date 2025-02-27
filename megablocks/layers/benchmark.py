@@ -331,12 +331,8 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     # top_experts: [sl * bs, top-k]
     x = torch.rand((seq_len, bs, hid_dim), device='cuda')
     logits = torch.rand((seq_len * bs, expert_num), device='cuda')
-    
-    expert_weights = torch.rand((seq_len * bs, top_k), device='cuda')
-    indices = torch.arange(expert_num, device='cuda').repeat(seq_len * bs, 1)  # (seq_len * bs, expert_num)
-    shuffled = indices[torch.arange(seq_len * bs, device='cuda').unsqueeze(1), torch.rand(seq_len * bs, expert_num, device='cuda').argsort(dim=1)]
-    top_experts = shuffled[:, :top_k]  # Select the first top_k elements
-
+    scores = logits.softmax(dim=-1)
+    expert_weights, top_experts = torch.topk(scores, top_k, dim=-1)
     
     expert_weights = expert_weights.flatten()
     top_experts = top_experts.flatten()
