@@ -324,14 +324,16 @@ class ParallelDroplessMLP(moe.ParallelMLP):
                 top_k,
             )
 
-# benchmark routing kernel for megablocks
-def run_megablocks(top_k, expert_num, bs, seq_len, hid_dim):
+# benchmark kernel sperately for megablocks
+def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     # x: [sl, bs, hs]
     # expert_weights: [sl * bs, top-k]
     # top_experts: [sl * bs, top-k]
     x = torch.rand((seq_len, bs, hid_dim), device='cuda')
+    logits = torch.rand((seq_len * bs, expert_num), device='cuda')
+    
     expert_weights = torch.rand((seq_len * bs, top_k), device='cuda')
-    top_experts = torch.rand((seq_len * bs, top_k), device='cuda') 
+    top_experts = torch.randint((seq_len * bs, top_k), device='cuda').clamp(max=expert_num) 
     
     expert_weights = expert_weights.flatten()
     top_experts = top_experts.flatten()
@@ -352,18 +354,19 @@ def run_megablocks(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     # teset indices_and_padded_bins
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    start_time = time.time()
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
-    indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
+    start_time = time.time()
+    for _ in range(10):
+        indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
+    end_time = time.time()
     
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
-    end_time = time.time()
     
-    # print("---------- benchmarking the routing kernel ----------")
+    print("---------- benchmarking the routing kernel ----------")
     # print(f"indices shape {indices.shape}")
     # print(f"bin_ids shape {bin_ids.shape}")
     # print(f"bins shape {bins.shape}")
@@ -374,72 +377,76 @@ def run_megablocks(top_k, expert_num, bs, seq_len, hid_dim):
     memory_used = end_memory - start_memory
     peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
     print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
     
     #################################################################
-    # teset indices_and_padded_bins
+    # teset padded gather
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    start_time = time.time()
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
-    # Route the tokens for MoE computation.
-    x = x.view(-1, x.shape[-1])
-    x = ops.padded_gather(
-        x,
-        indices,
-        bin_ids,
-        bins,
-        padded_bins,
-        model.top_k,
-    )
+    start_time = time.time()
+    for _ in range(10):
+        # Route the tokens for MoE computation.
+        x = x.view(-1, x.shape[-1])
+        x = ops.padded_gather(
+            x,
+            indices,
+            bin_ids,
+            bins,
+            padded_bins,
+            model.top_k,
+        )
+    end_time = time.time()
 
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
-    end_time = time.time()
     
     print("---------- benchmarking the dispatching kernel ----------")
     # mem summary
     memory_used = end_memory - start_memory
     peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
     print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
-    print("-----------------------------------------------------")
     #################################################################
     
     #################################################################
-    # teset indices_and_padded_bins
+    # teset topo matirx
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    start_time = time.time()
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
-
+    
+    start_time = time.time()
     # Create the sparse matrix topology.
     with torch.no_grad():
-        topo = model.topology(x, padded_bins)
-
+        for _ in range(10):
+            topo = model.topology(x, padded_bins)
+    end_time = time.time()
+    
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
-    end_time = time.time()
     
     print("---------- benchmarking the topo matrix kernel ----------")
     # mem summary
     memory_used = end_memory - start_memory
     peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {(end_time - start_time) * 1000:.6f} ms")
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
     print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
-    print("-----------------------------------------------------")
     #################################################################
 
+# bechmark megablocks gating's fwd and bwd
+def run_megablocks_all(logits):
+    pass
+    
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Benchmark dMoE's indices_and_padded_bins.")
@@ -451,5 +458,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
-    run_megablocks(args.top_k, args.e, args.bs, args.s, args.hid_dim)
+    run_megablocks_seperate(args.top_k, args.e, args.bs, args.s, args.hid_dim)
 
+
+
+    
