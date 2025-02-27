@@ -333,9 +333,6 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     logits = torch.rand((seq_len * bs, expert_num), device='cuda')
     scores = logits.softmax(dim=-1)
     expert_weights, top_experts = torch.topk(scores, top_k, dim=-1)
-    print(f"expert_weights shape {expert_weights.shape}")
-    print(f"top_experts shape {top_experts.shape}")
-    print(f"x shape {x.shape}")
     expert_weights = expert_weights.flatten()
     top_experts = top_experts.flatten()
     
@@ -379,7 +376,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     peak_memory_used = peak_memory - start_memory
     
     print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
-    print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
     
@@ -415,7 +412,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     peak_memory_used = peak_memory - start_memory
     
     print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
-    print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
     
@@ -442,7 +439,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     peak_memory_used = peak_memory - start_memory
     
     print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
-    print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
 
@@ -462,6 +459,7 @@ if __name__ == "__main__":
 
     print(f"Arguments: {args}")
     run_megablocks_seperate(args.top_k, args.e, args.bs, args.s, args.hid_dim)
+    print("\n \n")
 
 
 
