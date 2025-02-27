@@ -333,7 +333,9 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     logits = torch.rand((seq_len * bs, expert_num), device='cuda')
     scores = logits.softmax(dim=-1)
     expert_weights, top_experts = torch.topk(scores, top_k, dim=-1)
-    
+    print(f"expert_weights shape {expert_weights.shape}")
+    print(f"top_experts shape {top_experts.shape}")
+    print(f"x shape {x.shape}")
     expert_weights = expert_weights.flatten()
     top_experts = top_experts.flatten()
     
@@ -360,7 +362,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     for _ in range(10):
         indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
     end_time = time.time()
-    
+    print(f"indices shape {indices.shape}")    
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
