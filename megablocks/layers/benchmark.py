@@ -390,10 +390,11 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     start_memory = torch.cuda.memory_allocated()
     
     start_time = time.time()
+    
+    x = x.view(-1, x.shape[-1])
     for _ in range(10):
         # Route the tokens for MoE computation.
-        x = x.view(-1, x.shape[-1])
-        x = ops.padded_gather(
+        tmp = ops.padded_gather(
             x,
             indices,
             bin_ids,
@@ -401,8 +402,9 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             padded_bins,
             model.top_k,
         )
+        
     end_time = time.time()
-
+    x = tmp
     torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
