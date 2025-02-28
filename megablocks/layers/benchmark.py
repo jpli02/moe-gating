@@ -13,6 +13,8 @@ import megablocks.ops as ops
 from megablocks.layers import common, dmlp_registry, moe, mpu
 from megablocks.layers.arguments import Arguments
 
+torch.manual_seed(0)
+
 
 def promote_scalar(x):
     return x.view(1) if not len(x.size()) else x
@@ -355,11 +357,12 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
+    torch.cuda.synchronize()
     start_time = time.time()
     for _ in range(10):
         indices, bin_ids, bins, padded_bins, tokens_per_expert = model.indices_and_padded_bins(top_experts)
-    end_time = time.time()
     torch.cuda.synchronize()
+    end_time = time.time()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
     
@@ -381,13 +384,26 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     #################################################################
     # teset padded gather
+
+    x = x.view(-1, x.shape[-1])
+
+    for _ in range(10):
+        # Route the tokens for MoE computation.
+        tmp = ops.padded_gather(
+            x,
+            indices,
+            bin_ids,
+            bins,
+            padded_bins,
+            model.top_k,
+        )
+
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     start_time = time.time()
-    
-    x = x.view(-1, x.shape[-1])
     for _ in range(10):
         # Route the tokens for MoE computation.
         tmp = ops.padded_gather(
@@ -399,6 +415,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             model.top_k,
         )
         
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     end_time = time.time()
     x = tmp
     torch.cuda.synchronize()
@@ -417,18 +434,23 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     #################################################################
     # teset topo matirx
-    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+
+    with torch.no_grad():
+        for _ in range(10):
+            topo = model.topology(x, padded_bins)
+
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     start_time = time.time()
     # Create the sparse matrix topology.
     with torch.no_grad():
         for _ in range(10):
             topo = model.topology(x, padded_bins)
+    torch.cuda.synchronize()
     end_time = time.time()
     
-    torch.cuda.synchronize()
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
     
