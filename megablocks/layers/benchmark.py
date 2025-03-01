@@ -467,11 +467,10 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     #################################################################
     # test mlp 
-    print(x.dtype)
-    print(topo.dtype)
     for _ in range(10):
         tmp = model.mlp(x, topo)
 
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
@@ -484,6 +483,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     end_time = time.time()
     x = tmp
     
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
     
@@ -512,6 +512,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             top_k,
         )
         
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
     
@@ -532,7 +533,6 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     torch.cuda.synchronize()
     end_time = time.time()
     x = tmp
-
     end_memory = torch.cuda.memory_allocated()
     peak_memory = torch.cuda.max_memory_allocated()
     
