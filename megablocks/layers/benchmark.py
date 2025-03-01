@@ -467,7 +467,8 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     #################################################################
     # test mlp 
-
+    print(x.shape)
+    print(topo.shape)
     for _ in range(10):
         tmp = model.mlp(x, topo)
 
