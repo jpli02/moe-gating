@@ -164,25 +164,25 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         # x: [sl, bs, hs]
         # expert_weights: [sl * bs, top-k]
         # top_experts: [sl * bs, top-k]
-        expert_weights = expert_weights.flatten()
-        top_experts = top_experts.flatten()
-        with torch.no_grad():
-            indices, bin_ids, bins, padded_bins, tokens_per_expert = (self.indices_and_padded_bins(top_experts))
+        # expert_weights = expert_weights.flatten()
+        # top_experts = top_experts.flatten()
+        # with torch.no_grad():
+        #     indices, bin_ids, bins, padded_bins, tokens_per_expert = (self.indices_and_padded_bins(top_experts))
 
-        # Route the tokens for MoE computation.
-        x = x.view(-1, x.shape[-1])
-        x = ops.padded_gather(
-            x,
-            indices,
-            bin_ids,
-            bins,
-            padded_bins,
-            self.top_k,
-        )
+        # # Route the tokens for MoE computation.
+        # x = x.view(-1, x.shape[-1])
+        # x = ops.padded_gather(
+        #     x,
+        #     indices,
+        #     bin_ids,
+        #     bins,
+        #     padded_bins,
+        #     self.top_k,
+        # )
 
-        # Create the sparse matrix topology.
-        with torch.no_grad():
-            topo = self.topology(x, padded_bins)
+        # # Create the sparse matrix topology.
+        # with torch.no_grad():
+        #     topo = self.topology(x, padded_bins)
 
         # Perform the expert computation.
         x = self.mlp(x, topo)
@@ -340,7 +340,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     args = Arguments(
         hidden_size=hid_dim,
-        ffn_hidden_size=hid_dim * 4,  
+        ffn_hidden_size=2048,  
         moe_num_experts=expert_num,
         moe_top_k=top_k,
         mlp_impl='sparse' 
