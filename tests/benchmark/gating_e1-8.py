@@ -1,7 +1,7 @@
 import os
 
 expert = [1, 2, 4, 8]
-top = [2, 4, 8]
+top = [1, 2, 4, 8]
 for ex in expert:
     for t in top:
         if ex >= t:
