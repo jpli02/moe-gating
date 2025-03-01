@@ -352,7 +352,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
         _ = model.indices_and_padded_bins(top_experts)
     
     #################################################################
-    # teset indices_and_padded_bins
+    # test indices_and_padded_bins
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
@@ -383,7 +383,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     
     #################################################################
-    # teset padded gather
+    # test padded gather
 
     x = x.view(-1, x.shape[-1])
 
@@ -433,7 +433,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     
     #################################################################
-    # teset topo matirx
+    # test topo matirx
 
     with torch.no_grad():
         for _ in range(10):
@@ -463,6 +463,90 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
     print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
+    
+    
+    #################################################################
+    # test mlp 
+
+    for _ in range(10):
+        tmp = model.mlp(x, topo)
+
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+    
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    start_time = time.time()
+    # Perform the expert computation.
+    for _ in range(10):
+        tmp = model.mlp(x, topo)
+    torch.cuda.synchronize()
+    end_time = time.time()
+    x = tmp
+    
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    
+    print("---------- benchmarking the mlp kernel ----------")
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    #################################################################
+    
+    #################################################################
+    # test unroute
+
+    for _ in range(10):
+        # Un-route the data for the MoE output.
+        tmp = ops.padded_scatter(
+            x,
+            indices,
+            bin_ids,
+            expert_weights,
+            bins,
+            padded_bins,
+            top_k,
+        )
+        
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+    
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    start_time = time.time()
+    # Perform the expert computation.
+    for _ in range(10):
+        # Un-route the data for the MoE output.
+        tmp = ops.padded_scatter(
+            x,
+            indices,
+            bin_ids,
+            expert_weights,
+            bins,
+            padded_bins,
+            top_k,
+        )
+    torch.cuda.synchronize()
+    end_time = time.time()
+    x = tmp
+
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    
+    print("---------- benchmarking the unroute kernel ----------")
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    #################################################################
+    
+
+    
 
 # bechmark megablocks gating's fwd and bwd
 def run_megablocks_all(logits):
