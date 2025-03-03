@@ -27,7 +27,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         self.hidden_size = args.hidden_size
         self.ffn_hidden_size = mpu.features_per_rank(args)
         self.blocking = 128
-        self.mlp = dmlp_registry.get(args)
+        # self.mlp = dmlp_registry.get(args)
 
         # Calculate the number of bits needed to represent the column indices
         # in the intermediate sparse matrix.
@@ -466,35 +466,35 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     
     
     #################################################################
-    # test mlp 
-    for _ in range(10):
-        tmp = model.mlp(x, topo)
+    # # test mlp 
+    # for _ in range(10):
+    #     tmp = model.mlp(x, topo)
 
-    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    torch.cuda.reset_peak_memory_stats()
-    start_memory = torch.cuda.memory_allocated()
+    # torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    # torch.cuda.reset_peak_memory_stats()
+    # start_memory = torch.cuda.memory_allocated()
     
-    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    start_time = time.time()
-    # Perform the expert computation.
-    for _ in range(10):
-        tmp = model.mlp(x, topo)
-    torch.cuda.synchronize()
-    end_time = time.time()
-    x = tmp
+    # torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    # start_time = time.time()
+    # # Perform the expert computation.
+    # for _ in range(10):
+    #     tmp = model.mlp(x, topo)
+    # torch.cuda.synchronize()
+    # end_time = time.time()
+    # x = tmp
     
-    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
-    end_memory = torch.cuda.memory_allocated()
-    peak_memory = torch.cuda.max_memory_allocated()
+    # torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    # end_memory = torch.cuda.memory_allocated()
+    # peak_memory = torch.cuda.max_memory_allocated()
     
-    print("---------- benchmarking the mlp kernel ----------")
-    # mem summary
-    memory_used = end_memory - start_memory
-    peak_memory_used = peak_memory - start_memory
+    # print("---------- benchmarking the mlp kernel ----------")
+    # # mem summary
+    # memory_used = end_memory - start_memory
+    # peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
-    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
-    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    # print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    # # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    # print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
     
     #################################################################
