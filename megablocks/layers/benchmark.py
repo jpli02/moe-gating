@@ -385,7 +385,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     # test padded gather
 
-    x = x.view(-1, x.shape[-1])
+    x = x.view(-1, x.shape[-1], requires_grad=True)
 
     for _ in range(10):
         # Route the tokens for MoE computation.
@@ -398,6 +398,11 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             model.top_k,
         )
         print(f'gather shape: {tmp.shape}, dtype: {tmp.dtype}')
+
+    incoming_gradients = torch.randn_like(tmp)
+
+    for _ in range(10):
+        tmp.backward(incoming_gradients)
 
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
@@ -415,6 +420,9 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             padded_bins,
             model.top_k,
         )
+
+    for _ in range(10):
+        tmp.backward(incoming_gradients)
         
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     end_time = time.time()
@@ -428,9 +436,9 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     memory_used = end_memory - start_memory
     peak_memory_used = peak_memory - start_memory
     
-    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    print(f"Execution Time fwd+bwd: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
     # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
-    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used fwd+bwd: {peak_memory_used / 1024 ** 2:.2f} MB")
     #################################################################
     
     #################################################################
