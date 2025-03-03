@@ -397,6 +397,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             padded_bins,
             model.top_k,
         )
+        print(f'gather shape: {tmp.shape}, dtype: {tmp.dtype}')
 
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
