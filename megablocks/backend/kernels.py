@@ -4,6 +4,7 @@
 import torch
 import triton
 import triton.language as tl
+import pdb
 
 
 def assert_is_tensor(x, ndim):
@@ -560,8 +561,6 @@ def num_sms():
         return torch.cuda.get_device_properties("cuda").multi_processor_count
     return 148
 
-## Need to modify for correctness OOB checks. TODO(ahangupta). ##
-
 ## Code taken from: https://triton-lang.org/main/getting-started/tutorials/08-grouped-gemm.html#sphx-glr-getting-started-tutorials-08-grouped-gemm-py. ##
 @triton.autotune(
     configs=[
@@ -624,6 +623,7 @@ def grouped_matmul_kernel(
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
+    activation: tl.constexpr,
 ):
     tile_idx = tl.program_id(0)
     last_problem_end = 0
@@ -642,9 +642,14 @@ def grouped_matmul_kernel(
             lda = tl.load(g_lds + g * 3)
             ldb = tl.load(g_lds + g * 3 + 1)
             ldc = tl.load(g_lds + g * 3 + 2)
-            a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
-            b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
-            c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
+            if activation == 'float16':
+                a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
+                b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
+                c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
+            else:
+                a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
+                b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
+                c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
             # figure out tile coordinates
             tile_idx_in_gemm = tile_idx - last_problem_end
             tile_m_idx = tile_idx_in_gemm // num_n_tiles
@@ -659,8 +664,9 @@ def grouped_matmul_kernel(
             accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
             for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
                 # hint to Triton compiler to do proper loop pipelining
-                tl.multiple_of(a_ptrs, [16, 16])
-                tl.multiple_of(b_ptrs, [16, 16])
+                # tl.multiple_of(a_ptrs, [16, 16])
+                # tl.multiple_of(b_ptrs, [16, 16])
+                pdb.set_trace()
                 # assume full tile for now
                 a = tl.load(a_ptrs, mask= \
                             ## Question, what on earth goes in here? ##
@@ -731,6 +737,12 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         d_g_sizes,
         d_g_lds,
         group_size,
+        ## For debugging only, remove once finished. ##
+        BLOCK_SIZE_M=16,
+        BLOCK_SIZE_N=16,
+        BLOCK_SIZE_K=16,
+        NUM_SM=1,
+        activation="float16" if group_A[0].dtype == torch.float16  else "float32"
     )
 
     return group_C
@@ -745,7 +757,13 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     ## First, we have to re-shape the input. ##
     slice_idxs = [i[0] for i in sizes]
     x = torch.split(x, slice_idxs)
-    return group_gemm_fn(x, w, x[0].device)
+    gemm_out = group_gemm_fn(x, w, x[0].device)
+    ## This is for debugging only, remove once finished. ##
+    ## We compare against pytorch ground-truth. ##
+    torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    for g_out, t_out in zip(gemm_out, torch_out):
+        print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    return torch.cat(gemm_out, dim=0)
 
 
 if __name__ == '__main__':
@@ -774,16 +792,16 @@ if __name__ == '__main__':
     m = [16, 16, 16, 16]
     n = [16, 16, 16, 16]
     k = [16, 16, 16, 16]
-    print(test_case(m, n, k, ty))
+    test_case(m, n, k, ty)
 
-    ## Smaller test-case.
+    # ## Smaller test-case.
     ty : torch.dtype = torch.float16
     m = [97, 75, 49, 60]
     n = [29, 80, 53, 129]
     k = [54, 54, 54, 54]
     test_case(m, n, k, ty)
 
-    ## Larger test-case.
+    # ## Larger test-case.
     ty : torch.dtype = torch.float16
     m = [1024, 256, 512, 190]
     n = [512, 768, 1024, 135]
