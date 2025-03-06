@@ -662,8 +662,13 @@ def grouped_matmul_kernel(
                 tl.multiple_of(a_ptrs, [16, 16])
                 tl.multiple_of(b_ptrs, [16, 16])
                 # assume full tile for now
-                a = tl.load(a_ptrs)
-                b = tl.load(b_ptrs)
+                a = tl.load(a_ptrs, mask= \
+                            ## Question, what on earth goes in here? ##
+                            (offs_am[:, None] < gm)  \
+                            & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
+                b = tl.load(b_ptrs, mask = \
+                            (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
+                            & (offs_bn[None, :] < gn))
                 accumulator += tl.dot(a, b)
                 a_ptrs += BLOCK_SIZE_K
                 b_ptrs += BLOCK_SIZE_K * ldb
@@ -674,7 +679,9 @@ def grouped_matmul_kernel(
             c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
 
             # assumes full tile for now
-            tl.store(c_ptrs, c)
+            tl.store(c_ptrs, c, mask=\
+                     (offs_cm[:, None] < gm) \
+                     & (offs_cn[None, :] < gn))
 
             # go to the next tile by advancing NUM_SM
             tile_idx += NUM_SM
@@ -729,7 +736,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     return group_C
 
 
-def grouped_gemm(x: torch.Tensor, w: torch.Tensor, 
+def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
                  sizes: list[tuple[int, int, int]]) -> torch.Tensor:
     assert len(sizes) <= 4, 'Current only support num_experts <= 4.'
     assert len(x.shape) == 2, 'x should be 2-d tensor.'
@@ -738,7 +745,7 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     ## First, we have to re-shape the input. ##
     slice_idxs = [i[0] for i in sizes]
     x = torch.split(x, slice_idxs)
-    group_gemm_fn(x, w, x[0].device)
+    return group_gemm_fn(x, w, x[0].device)
 
 
 if __name__ == '__main__':
@@ -755,7 +762,7 @@ if __name__ == '__main__':
             sizes.append((one, two, three))
             grp_B.append(b)
 
-        grouped_gemm(torch.randn(cum_size_a, ks[0]), grp_B, sizes)
+        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu"), grp_B, sizes)
 
 
     ## Since the most common case is expert_count = 4, we specifically test for that. ##
@@ -767,7 +774,7 @@ if __name__ == '__main__':
     m = [97, 75, 49, 60]
     n = [29, 80, 53, 129]
     k = [54, 54, 54, 54]
-    test_case(m, n, k, ty)
+    print(test_case(m, n, k, ty))
 
     ## Larger test-case.
     ty : torch.dtype = torch.float16
@@ -775,4 +782,4 @@ if __name__ == '__main__':
     n = [512, 768, 1024, 135]
     k = [150, 150, 150, 150]
     test_case(m, n, k, ty)
-    
+
