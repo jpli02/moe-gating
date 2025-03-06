@@ -769,12 +769,19 @@ if __name__ == '__main__':
     ## We do a mXk by a kXn mat-mul. ##
     ## However, the model_dimension is kept constant through all ops. ##
 
+    ## Tiny test case in float32 for debugging. ##
+    ty : torch.dtype = torch.float32
+    m = [16, 16, 16, 16]
+    n = [16, 16, 16, 16]
+    k = [16, 16, 16, 16]
+    print(test_case(m, n, k, ty))
+
     ## Smaller test-case.
     ty : torch.dtype = torch.float16
     m = [97, 75, 49, 60]
     n = [29, 80, 53, 129]
     k = [54, 54, 54, 54]
-    print(test_case(m, n, k, ty))
+    test_case(m, n, k, ty)
 
     ## Larger test-case.
     ty : torch.dtype = torch.float16
