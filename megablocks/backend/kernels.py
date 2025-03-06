@@ -4,7 +4,6 @@
 import torch
 import triton
 import triton.language as tl
-import pdb
 
 
 def assert_is_tensor(x, ndim):
@@ -617,13 +616,14 @@ def grouped_matmul_kernel(
     g_lds,
     # number of gemms
     group_size,
+    # precision of activations and weights.
+    activation: tl.constexpr,
     # number of virtual SM
     NUM_SM: tl.constexpr,
     # tile sizes
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
-    activation: tl.constexpr,
 ):
     tile_idx = tl.program_id(0)
     last_problem_end = 0
@@ -666,7 +666,6 @@ def grouped_matmul_kernel(
                 # hint to Triton compiler to do proper loop pipelining
                 # tl.multiple_of(a_ptrs, [16, 16])
                 # tl.multiple_of(b_ptrs, [16, 16])
-                pdb.set_trace()
                 # assume full tile for now
                 a = tl.load(a_ptrs, mask= \
                             ## Question, what on earth goes in here? ##
@@ -737,11 +736,6 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         d_g_sizes,
         d_g_lds,
         group_size,
-        ## For debugging only, remove once finished. ##
-        BLOCK_SIZE_M=16,
-        BLOCK_SIZE_N=16,
-        BLOCK_SIZE_K=16,
-        NUM_SM=1,
         activation="float16" if group_A[0].dtype == torch.float16  else "float32"
     )
 
@@ -780,7 +774,7 @@ if __name__ == '__main__':
             sizes.append((one, two, three))
             grp_B.append(b)
 
-        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu"), grp_B, sizes)
+        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
 
 
     ## Since the most common case is expert_count = 4, we specifically test for that. ##
@@ -797,14 +791,14 @@ if __name__ == '__main__':
     # ## Smaller test-case.
     ty : torch.dtype = torch.float16
     m = [97, 75, 49, 60]
-    n = [29, 80, 53, 129]
-    k = [54, 54, 54, 54]
+    n = [82, 82, 82, 82]  ## ffn_hidden_size.
+    k = [54, 54, 54, 54]  ## model hidden size.
     test_case(m, n, k, ty)
 
-    # ## Larger test-case.
+    # ## Larger test-case. More realisitc.
     ty : torch.dtype = torch.float16
     m = [1024, 256, 512, 190]
-    n = [512, 768, 1024, 135]
+    n = [512, 512, 512, 512]
     k = [150, 150, 150, 150]
     test_case(m, n, k, ty)
 
