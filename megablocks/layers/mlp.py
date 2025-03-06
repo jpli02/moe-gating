@@ -1,7 +1,7 @@
 # Copyright 2024 Databricks
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any
+from typing import Any 
 
 import stk
 import stk.backend.triton_kernels
@@ -10,6 +10,7 @@ import torch
 from packaging import version
 
 from megablocks import grouped_gemm_util as gg
+from megablocks.backend.kernels import grouped_gemm 
 from megablocks.layers import common, gelu, mpu
 from megablocks.layers.activation_fn import act_fn
 from megablocks.layers.arguments import DEFAULT_ACTIVATION_FN, Arguments, InitFn
@@ -303,6 +304,49 @@ class MemoryOptimizedMLP(torch.autograd.Function):
 
 
 memory_optimized_mlp = MemoryOptimizedMLP.apply
+
+## Potentially change to a torch.nn.Module? ##
+class UnPaddedMLP(torch.nn.Module):
+
+    def __init__(self, args: Arguments):
+        super().__init__()
+        self.args = args
+        self._num_rows_per_rank = mpu.experts_per_rank(args) * mpu.features_per_rank(args)
+
+        ## We have to restructure the experts. ##
+        ## Store them as a list at init time to avoid 
+        ## extra per iteration overhead. ##
+        self.w1 = [torch.nn.Parameter(
+            torch.empty((
+                args.hidden_size,
+                args.ffn_hidden_size
+            )
+                device=args.device,
+                dtype=common.dtype(args),
+            ),
+        ) for _ in range(args.moe_num_packed_experts)]
+
+        self.w2 = [torch.nn.Parameter(
+            torch.empty((
+                args.ffn_hidden_size,
+                args.hidden_size
+            )
+                device=args.device,
+                dtype=common.dtype(args),
+            ),
+        ) for _ in range(args.moe_num_packed_experts)]
+
+        self.activation_fn = args.activation_fn
+
+
+    def forward(self, x: torch.Tensor, 
+                sizes: list[tuple[int, int int]]):
+
+        ## First, we call the forward pass simply. ##
+        activ = grouped_gemm(x, self.w1, sizes)
+
+        ## TODO(mutate the tensor sizes). ##
+        return grouped_gemm(self.activation_fn(activ), w2, sizes)
 
 
 class SparseMLP(torch.nn.Module):
