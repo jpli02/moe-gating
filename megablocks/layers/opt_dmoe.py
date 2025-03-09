@@ -124,3 +124,36 @@ class OPTdMoE(moe.MoE):
 
     def _init_experts_mlp(self, args: Arguments):
         return OPTParallelDroplessMLP(args)
+
+if __name__ == '__main__':
+    ## Here we test our dropless no-padding moe. ##
+    ## In the single GPU case we pack with 4 experts to a GPU. ##
+    from megablocks.layers.dmoe import dMoE
+    args_unpadded = Arguments()
+    args_padded = Arguments()
+
+    ## Construct fake input and test. ##
+    def test_case(batch_size: int, num_tokens: int, hidden_dim: int, 
+                  num_experts: int, dtype: torch.dtype, 
+                  args_unpadded: Arguments,
+                  args_padded: Arguments):
+        x = torch.randn((batch_size, num_tokens, hidden_dim), 
+                        dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu")
+        args_unpadded.hidden_size = hidden_dim 
+        args_unpadded.moe_num_packed_experts = num_experts
+        args_padded.hidden_size = hidden_dim 
+        args_padded.moe_num_packed_experts = num_experts
+        args_unpadded.mlp_impl = "OptGrouped"
+        optMoE = OPTdMoE(args_unpadded)
+        paddedMoE = dMoE(args_padded)
+        topk_weights, topk_args = torch.topk(torch.nn.softmax(torch.randn((batch_size*num_tokens, num_experts)), axis=-1), k=num_experts)
+        opt_res = optMoE.forward_once(x, topk_weights, topk_args)
+        ground_truth = paddedMoE.forward_once(x, topk_weights, topk_args)
+
+        print(f'max diff: {torch.abs(opt_res - ground_truth).max().item()}')
+
+
+    ## Try a sample test case on 32-bit precision, easy for debugging. ##
+    test_case(1, 32, 32, 4, torch.float32, args_unpadded, args_padded)
+
+    

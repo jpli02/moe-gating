@@ -10,7 +10,7 @@ import torch
 from packaging import version
 
 from megablocks import grouped_gemm_util as gg
-from megablocks.backend.kernels import grouped_gemm 
+from megablocks.ops.unpadded_grouped_gemm import GroupedGemm
 from megablocks.layers import common, gelu, mpu
 from megablocks.layers.activation_fn import act_fn
 from megablocks.layers.arguments import DEFAULT_ACTIVATION_FN, Arguments, InitFn
@@ -343,10 +343,11 @@ class UnPaddedMLP(torch.nn.Module):
                 sizes: list[tuple[int, int int]]):
 
         ## First, we call the forward pass simply. ##
-        activ = grouped_gemm(x, self.w1, sizes)
+        activ = GroupedGemm(x, self.w1, sizes)
 
-        ## TODO(mutate the tensor sizes). ##
-        return grouped_gemm(self.activation_fn(activ), w2, sizes)
+        inter_sizes = [(i[0], self.args.hidden_size, self.args.ffn_hidden_size) for i in sizes]
+        second_activs = GroupedGemm([self.activation_fn(i) for i in activ], w2, inter_sizes)
+        return torch.cat(second_activ, dim=0)
 
 
 class SparseMLP(torch.nn.Module):

@@ -754,9 +754,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. ##
-    torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    for g_out, t_out in zip(gemm_out, torch_out):
-        print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    # for g_out, t_out in zip(gemm_out, torch_out):
+    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 
