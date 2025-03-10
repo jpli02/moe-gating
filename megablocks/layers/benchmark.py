@@ -548,7 +548,127 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     
 
+def routing_cuda(top_experts, sort_end_bit, expert_num):
+    # cuda kernel
+    top_experts = top_experts.int()
+    bin_ids, indices = ops.sort(top_experts, sort_end_bit)
+
+    # Histogram the expert ids to identify the number of
+    # tokens routed to each expert.
+    tokens_per_expert = ops.histogram(top_experts, expert_num)
+
+    # Calculate the bin bounds for the sorted tokens.
+    bins = ops.inclusive_cumsum(tokens_per_expert, 0)
+    bins = promote_scalar(bins)
+    return indices, bin_ids, bins, tokens_per_expert
+
+@torch.compile
+def routing_torch(top_experts, sort_end_bit, expert_num):
+    # torch kernel
+    top_experts = top_experts.int()
+    bin_ids, indices = torch.sort(top_experts, sort_end_bit)
+
+    # Histogram the expert ids to identify the number of
+    # tokens routed to each expert.
+    tokens_per_expert = torch.histogram(top_experts, expert_num)
+
+    # Calculate the bin bounds for the sorted tokens.
+    bins = torch.cumsum(tokens_per_expert, 0)
+    bins = promote_scalar(bins)
+    return indices, bin_ids, bins, tokens_per_expert
+
+# benchmark kernel sperately for megablocks
+def bench_routing_kernels(top_k, expert_num, bs, seq_len, hid_dim):
+    # x: [sl, bs, hs]
+    # expert_weights: [sl * bs, top-k]
+    # top_experts: [sl * bs, top-k]
+    x = torch.rand((seq_len, bs, hid_dim), dtype=torch.float16, device='cuda')
+    logits = torch.rand((seq_len * bs, expert_num), dtype=torch.float16, device='cuda')
+    scores = logits.softmax(dim=-1)
+    expert_weights, top_experts = torch.topk(scores, top_k, dim=-1)
+    expert_weights = expert_weights.flatten()
+    top_experts = top_experts.flatten()
+    sort_end_bit = max(int(np.ceil(np.log2(expert_num))), 1)
     
+    args = Arguments(
+        hidden_size=hid_dim,
+        ffn_hidden_size=2048,  
+        moe_num_experts=expert_num,
+        moe_top_k=top_k,
+        mlp_impl='sparse' 
+    )
+    model = ParallelDroplessMLP(args).cuda()
+    
+    # Warm-up 
+    for _ in range(10):
+        routing_cuda(top_experts, sort_end_bit, expert_num)
+    
+    for _ in range(10):
+        routing_torch(top_experts, sort_end_bit, expert_num)
+    
+    # test routing kernel CUDA version
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+    
+    torch.cuda.synchronize()
+    start_time = time.time()
+    for _ in range(10):
+        indices, bin_ids, bins, tokens_per_expert = routing_cuda(top_experts, sort_end_bit, expert_num)
+
+    torch.cuda.synchronize()
+    end_time = time.time()
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    
+    print("---------- benchmarking the routing kernel: CUDA version ----------")
+    # print(f"indices shape {indices.shape}")
+    # print(f"bin_ids shape {bin_ids.shape}")
+    # print(f"bins shape {bins.shape}")
+    # print(f"padded_bins shape {padded_bins.shape}")
+    # print(f"tokens_per_expert shape {tokens_per_expert.shape}")
+    
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+
+    # test routing kernel torch compile version
+    torch.cuda.synchronize()  # Ensure all CUDA operations are finished
+    torch.cuda.reset_peak_memory_stats()
+    start_memory = torch.cuda.memory_allocated()
+    
+    torch.cuda.synchronize()
+    start_time = time.time()
+    for _ in range(10):
+        indices, bin_ids, bins, tokens_per_expert = routing_torch(top_experts, sort_end_bit, expert_num)
+
+    torch.cuda.synchronize()
+    end_time = time.time()
+    end_memory = torch.cuda.memory_allocated()
+    peak_memory = torch.cuda.max_memory_allocated()
+    
+    print("---------- benchmarking the routing kernel: pytorch version ----------")
+    # print(f"indices shape {indices.shape}")
+    # print(f"bin_ids shape {bin_ids.shape}")
+    # print(f"bins shape {bins.shape}")
+    # print(f"padded_bins shape {padded_bins.shape}")
+    # print(f"tokens_per_expert shape {tokens_per_expert.shape}")
+    
+    # mem summary
+    memory_used = end_memory - start_memory
+    peak_memory_used = peak_memory - start_memory
+    
+    print(f"Execution Time: {((end_time - start_time) / 10.0) * 1000:.6f} ms")
+    # print(f"Memory Used: {memory_used / 1024 ** 2:.2f} MB")
+    print(f"Peak Memory Used: {peak_memory_used / 1024 ** 2:.2f} MB")
+    #################################################################
+    
+
+
 
 # bechmark megablocks gating's fwd and bwd
 def run_megablocks_all(logits):
@@ -565,7 +685,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
-    run_megablocks_seperate(args.top_k, args.e, args.bs, args.s, args.hid_dim)
+    # run_megablocks_seperate(args.top_k, args.e, args.bs, args.s, args.hid_dim)
+    bench_routing_kernels(args.top_k, args.e, args.bs, args.s, args.hid_dim)
     print("\n \n")
 
 
