@@ -562,7 +562,7 @@ def routing_cuda(top_experts, sort_end_bit, expert_num):
     bins = promote_scalar(bins)
     return indices, bin_ids, bins, tokens_per_expert
 
-@torch.compile
+# @torch.compile
 def routing_torch(top_experts, sort_end_bit, expert_num):
     # torch kernel
     top_experts = top_experts.int()
