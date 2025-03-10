@@ -10,17 +10,19 @@ from absl.testing import parameterized
 from megablocks import ops
 
 _CUDA_TESTS = (
-    (16384, torch.int32, 1, 256),
-    (16384, torch.int32, 2, 256),
-    (16384, torch.int32, 4, 256),
-    (16384, torch.int32, 128, 256),
+    (16384, torch.int32, 1),
+    (16384, torch.int32, 2),
+    (16384, torch.int32, 4),
+    (16384, torch.int32, 128),
+    (16384, torch.int32, 256),
 )
 
 _BASELINE_TORCH_TESTS = (
-    (16384, torch.int32, 1, 256),
-    (16384, torch.int32, 2, 256),
-    (16384, torch.int32, 4, 256),
-    (16384, torch.int32, 128, 256),
+    (16384, torch.int32, 1),
+    (16384, torch.int32, 2),
+    (16384, torch.int32, 4),
+    (16384, torch.int32, 128),
+    (16384, torch.int32, 256),
 )
 
 
@@ -101,27 +103,26 @@ def routing_CDUA(top_experts, end_bit, expert_num):
 class RouteBenchmark(parameterized.TestCase):
 
     @parameterized.parameters(*_CUDA_TESTS)
-    def testRouteCUDA(self, n, dtype, max_val, expert_num):
-        if max_val is None:
-            max_val = np.iinfo(numpy_dtype(dtype)).max
-        end_bit = int(np.ceil(np.log2(max_val)))
-        x = torch.randint(0, max_val, (n,)).cuda().to(dtype)
+    def testRouteCUDA(self, n, dtype, expert_num):
+        if expert_num is None:
+            expert_num = np.iinfo(numpy_dtype(dtype)).max
+        end_bit = int(np.ceil(np.log2(expert_num)))
+        x = torch.randint(0, expert_num, (n,)).cuda().to(dtype)
 
         mean_t, std_t, max_t, min_t = benchmark_function(lambda: routing_CDUA(x, end_bit, expert_num),)
         arguments = {
             'n': n,
             'dtype': dtype,
-            'top_k': max_val,
             'expert_num': expert_num
         }
         log_benchmark_CUDA(arguments, mean_t, std_t)
 
     @parameterized.parameters(*_BASELINE_TORCH_TESTS)
-    def testRouteTorch(self, n, dtype, max_val, expert_num):
-        if max_val is None:
-            max_val = np.iinfo(numpy_dtype(dtype)).max
-        end_bit = int(np.ceil(np.log2(max_val)))
-        x = torch.randint(0, max_val, (n,)).cuda().to(dtype)
+    def testRouteTorch(self, n, dtype, expert_num):
+        if expert_num is None:
+            expert_num = np.iinfo(numpy_dtype(dtype)).max
+        end_bit = int(np.ceil(np.log2(expert_num)))
+        x = torch.randint(0, expert_num, (n,)).cuda().to(dtype)
         
         # Correctness checks
         indices_cuda, bin_ids_cuda, bins_cuda, tokens_per_expert_cuda = routing_CDUA(x, end_bit, expert_num)
@@ -137,7 +138,6 @@ class RouteBenchmark(parameterized.TestCase):
         arguments = {
             'n': n,
             'dtype': dtype,
-            'top_k': max_val,
             'expert_num': expert_num
         }
         log_benchmark_torch(arguments, mean_t, std_t)
