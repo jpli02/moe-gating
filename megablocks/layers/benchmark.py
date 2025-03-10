@@ -566,7 +566,7 @@ def routing_cuda(top_experts, sort_end_bit, expert_num):
 def routing_torch(top_experts, sort_end_bit, expert_num):
     # torch kernel
     top_experts = top_experts.int()
-    bin_ids, indices = torch.sort(top_experts, sort_end_bit)
+    bin_ids, indices = torch.sort(top_experts)
 
     # Histogram the expert ids to identify the number of
     # tokens routed to each expert.
