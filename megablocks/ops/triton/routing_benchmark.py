@@ -9,14 +9,14 @@ from absl.testing import parameterized
 
 from megablocks import ops
 
-_SORT_TESTS = (
+_CUDA_TESTS = (
     (16384, torch.int32, 1, 256),
     (16384, torch.int32, 2, 256),
     (16384, torch.int32, 4, 256),
     (16384, torch.int32, 128, 256),
 )
 
-_BASELINE_SORT_TESTS = (
+_BASELINE_TORCH_TESTS = (
     (16384, torch.int32, 1, 256),
     (16384, torch.int32, 2, 256),
     (16384, torch.int32, 4, 256),
@@ -67,6 +67,7 @@ def log_benchmark_CUDA(arguments, mean_t, std_t):
     print('mean / std = {:.2f}ms / {:.2f}ms'.format(mean_t, std_t))
     print('=' * 60)
 
+
 @torch.compile
 def routing_torch(top_experts, end_bit, expert_num):
     # torch kernel
@@ -95,10 +96,9 @@ def routing_CDUA(top_experts, end_bit, expert_num):
     bins = ops.inclusive_cumsum(tokens_per_expert, 0)
     return indices, bin_ids, bins, tokens_per_expert
 
-
 class RouteBenchmark(parameterized.TestCase):
 
-    @parameterized.parameters(*_SORT_TESTS)
+    @parameterized.parameters(*_CUDA_TESTS)
     def testRouteCUDA(self, n, dtype, max_val, expert_num):
         if max_val is None:
             max_val = np.iinfo(numpy_dtype(dtype)).max
@@ -114,7 +114,7 @@ class RouteBenchmark(parameterized.TestCase):
         }
         log_benchmark_CUDA(arguments, mean_t, std_t)
 
-    @parameterized.parameters(*_BASELINE_SORT_TESTS)
+    @parameterized.parameters(*_BASELINE_TORCH_TESTS)
     def testTorchSort(self, n, dtype, max_val, expert_num):
         if max_val is None:
             max_val = np.iinfo(numpy_dtype(dtype)).max
