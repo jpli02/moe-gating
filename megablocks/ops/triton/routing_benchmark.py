@@ -49,9 +49,18 @@ def benchmark_function(fn, iterations=10):
     return times.mean(), times.std(), times.max(), times.min()
 
 
-def log_benchmark(arguments, mean_t, std_t):
+def log_benchmark_torch(arguments, mean_t, std_t):
     print('=' * 60)
-    print('Benchmark Parameters:')
+    print('Benchmark pytorch ops with Parameters:')
+    for (key, value) in arguments.items():
+        print(f'{key} = {value}')
+    print('Results:')
+    print('mean / std = {:.2f}ms / {:.2f}ms'.format(mean_t, std_t))
+    print('=' * 60)
+    
+def log_benchmark_CUDA(arguments, mean_t, std_t):
+    print('=' * 60)
+    print('Benchmark CUDA ops with Parameters:')
     for (key, value) in arguments.items():
         print(f'{key} = {value}')
     print('Results:')
@@ -103,7 +112,7 @@ class RouteBenchmark(parameterized.TestCase):
             'top_k': max_val,
             'expert_num': expert_num
         }
-        log_benchmark(arguments, mean_t, std_t)
+        log_benchmark_CUDA(arguments, mean_t, std_t)
 
     @parameterized.parameters(*_BASELINE_SORT_TESTS)
     def testTorchSort(self, n, dtype, max_val, expert_num):
@@ -119,7 +128,7 @@ class RouteBenchmark(parameterized.TestCase):
             'top_k': max_val,
             'max_val': max_val,
         }
-        log_benchmark(arguments, mean_t, std_t)
+        log_benchmark_torch(arguments, mean_t, std_t)
 
 
 
