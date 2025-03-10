@@ -96,7 +96,7 @@ class RouteBenchmark(parameterized.TestCase):
         end_bit = int(np.ceil(np.log2(max_val)))
         x = torch.randint(0, max_val, (n,)).cuda().to(dtype)
 
-        mean_t, std_t, max_t, min_t = benchmark_function(routing_CDUA(x, end_bit, expert_num),)
+        mean_t, std_t, max_t, min_t = benchmark_function(lambda: routing_CDUA(x, end_bit, expert_num),)
         arguments = {
             'n': n,
             'dtype': dtype,
@@ -112,7 +112,7 @@ class RouteBenchmark(parameterized.TestCase):
         end_bit = int(np.ceil(np.log2(max_val)))
         x = torch.randint(0, max_val, (n,)).cuda().to(dtype)
 
-        mean_t, std_t, max_t, min_t = benchmark_function(routing_torch(x, end_bit, expert_num),)
+        mean_t, std_t, max_t, min_t = benchmark_function(lambda: routing_torch(x, end_bit, expert_num),)
         arguments = {
             'n': n,
             'dtype': dtype,
