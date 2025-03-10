@@ -35,7 +35,9 @@ def numpy_dtype(dtype):
 
 def benchmark_function(fn, iterations=10):
     # Run once to get rid of startup overhead.
-    fn()
+    for _ in range(iterations):
+        fn()
+        
     times = []
     for _ in range(iterations):
         start = torch.cuda.Event(enable_timing=True)
@@ -115,11 +117,21 @@ class RouteBenchmark(parameterized.TestCase):
         log_benchmark_CUDA(arguments, mean_t, std_t)
 
     @parameterized.parameters(*_BASELINE_TORCH_TESTS)
-    def testTorchSort(self, n, dtype, max_val, expert_num):
+    def testRouteTorch(self, n, dtype, max_val, expert_num):
         if max_val is None:
             max_val = np.iinfo(numpy_dtype(dtype)).max
         end_bit = int(np.ceil(np.log2(max_val)))
         x = torch.randint(0, max_val, (n,)).cuda().to(dtype)
+        
+        # Correctness checks
+        indices_cuda, bin_ids_cuda, bins_cuda, tokens_per_expert_cuda = routing_CDUA(x, end_bit, expert_num)
+        indices_torch, bin_ids_torch, bins_torch, tokens_per_expert_torch = routing_torch(x, end_bit, expert_num)
+
+        assert torch.equal(indices_cuda, indices_torch), "Mismatch in indices!"
+        assert torch.equal(bin_ids_cuda, bin_ids_torch), "Mismatch in bin_ids!"
+        assert torch.equal(bins_cuda, bins_torch), "Mismatch in bins!"
+        assert torch.equal(tokens_per_expert_cuda, tokens_per_expert_torch), "Mismatch in tokens_per_expert!"
+
 
         mean_t, std_t, max_t, min_t = benchmark_function(lambda: routing_torch(x, end_bit, expert_num),)
         arguments = {
