@@ -67,7 +67,7 @@ def log_benchmark_CUDA(arguments, mean_t, std_t):
     print('mean / std = {:.2f}ms / {:.2f}ms'.format(mean_t, std_t))
     print('=' * 60)
 
-# @torch.compile
+@torch.compile
 def routing_torch(top_experts, end_bit, expert_num):
     # torch kernel
     top_experts = top_experts.int()
@@ -126,7 +126,7 @@ class RouteBenchmark(parameterized.TestCase):
             'n': n,
             'dtype': dtype,
             'top_k': max_val,
-            'max_val': max_val,
+            'expert_num': expert_num
         }
         log_benchmark_torch(arguments, mean_t, std_t)
 
