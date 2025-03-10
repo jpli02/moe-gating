@@ -399,11 +399,6 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
         )
         print(f'gather shape: {tmp.shape}, dtype: {tmp.dtype}')
 
-    incoming_gradients = torch.randn_like(tmp, requires_grad=True)
-
-    for _ in range(10):
-        tmp.backward(incoming_gradients, retain_graph=True)
-
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
     start_memory = torch.cuda.memory_allocated()
@@ -420,9 +415,6 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
             padded_bins,
             model.top_k,
         )
-
-    for _ in range(10):
-        tmp.backward(incoming_gradients, retain_graph=True)
         
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     end_time = time.time()

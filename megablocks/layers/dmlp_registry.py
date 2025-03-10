@@ -3,7 +3,7 @@
 
 from typing import Union
 
-from megablocks.layers import glu, mlp
+from megablocks.layers import glu, mlp 
 from megablocks.layers.arguments import Arguments
 
 MlpType = Union[mlp.SparseMLP, glu.SparseGLU]
@@ -12,6 +12,7 @@ _REGISTRY = {
     'mlp': {
         'grouped': mlp.GroupedMLP,
         'sparse': mlp.SparseMLP,
+        'OptGrouped': mlp.UnPaddedMLP
     },
     'glu': {
         'grouped': glu.GroupedGLU,

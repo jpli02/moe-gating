@@ -541,3 +541,264 @@ def binned_scatter_wgrad(x, grad, indices, bins, top_k):
         TOP_K=top_k,
     )
     return out
+
+
+## UnPaddedMatMulOps
+
+def is_cuda():
+    if torch.cuda.is_available():
+        return triton.runtime.driver.active.get_current_target().backend == "cuda"
+    return False
+
+
+def supports_tma():
+    return is_cuda() and torch.cuda.get_device_capability()[0] >= 9
+
+
+def num_sms():
+    if is_cuda():
+        return torch.cuda.get_device_properties("cuda").multi_processor_count
+    return 148
+
+## Code taken from: https://triton-lang.org/main/getting-started/tutorials/08-grouped-gemm.html#sphx-glr-getting-started-tutorials-08-grouped-gemm-py. ##
+@triton.autotune(
+    configs=[
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 32,
+            'NUM_SM': 84,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 32,
+            'NUM_SM': 128,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 64,
+            'BLOCK_SIZE_K': 32,
+            'NUM_SM': 84,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 64,
+            'BLOCK_SIZE_K': 32,
+            'NUM_SM': 128,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 64,
+            'NUM_SM': num_sms(),
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 64,
+            'NUM_SM': num_sms(),
+        }),
+    ],
+    key=['group_size'],
+)
+@triton.jit
+def grouped_matmul_kernel(
+    # device tensor of matrices pointers
+    group_a_ptrs,
+    group_b_ptrs,
+    group_c_ptrs,
+    # device tensor of gemm sizes. its shape is [group_size, 3]
+    # dim 0 is group_size, dim 1 is the values of <M, N, K> of each gemm
+    group_gemm_sizes,
+    # device tensor of leading dimension sizes. its shape is [group_size, 3]
+    # dim 0 is group_size, dim 1 is the values of <lda, ldb, ldc> of each gemm
+    g_lds,
+    # number of gemms
+    group_size,
+    # precision of activations and weights.
+    activation: tl.constexpr,
+    # number of virtual SM
+    NUM_SM: tl.constexpr,
+    # tile sizes
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+):
+    tile_idx = tl.program_id(0)
+    last_problem_end = 0
+    for g in range(group_size):
+        # get the gemm size of the current problem
+        gm = tl.load(group_gemm_sizes + g * 3)
+        gn = tl.load(group_gemm_sizes + g * 3 + 1)
+        gk = tl.load(group_gemm_sizes + g * 3 + 2)
+        num_m_tiles = tl.cdiv(gm, BLOCK_SIZE_M)
+        num_n_tiles = tl.cdiv(gn, BLOCK_SIZE_N)
+        num_tiles = num_m_tiles * num_n_tiles
+        # iterate through the tiles in the current gemm problem
+        while (tile_idx >= last_problem_end and tile_idx < last_problem_end + num_tiles):
+            # pick up a tile from the current gemm problem
+            k = gk
+            lda = tl.load(g_lds + g * 3)
+            ldb = tl.load(g_lds + g * 3 + 1)
+            ldc = tl.load(g_lds + g * 3 + 2)
+            if activation == 'float16':
+                a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
+                b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
+                c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
+            else:
+                a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
+                b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
+                c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
+            # figure out tile coordinates
+            tile_idx_in_gemm = tile_idx - last_problem_end
+            tile_m_idx = tile_idx_in_gemm // num_n_tiles
+            tile_n_idx = tile_idx_in_gemm % num_n_tiles
+
+            # do regular gemm here
+            offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            offs_k = tl.arange(0, BLOCK_SIZE_K)
+            a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
+            b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
+            accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+            for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
+                # hint to Triton compiler to do proper loop pipelining
+                # tl.multiple_of(a_ptrs, [16, 16])
+                # tl.multiple_of(b_ptrs, [16, 16])
+                # assume full tile for now
+                a = tl.load(a_ptrs, mask= \
+                            ## Question, what on earth goes in here? ##
+                            (offs_am[:, None] < gm)  \
+                            & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
+                b = tl.load(b_ptrs, mask = \
+                            (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
+                            & (offs_bn[None, :] < gn))
+                accumulator += tl.dot(a, b)
+                a_ptrs += BLOCK_SIZE_K
+                b_ptrs += BLOCK_SIZE_K * ldb
+            c = accumulator.to(tl.float16)
+
+            offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
+
+            # assumes full tile for now
+            tl.store(c_ptrs, c, mask=\
+                     (offs_cm[:, None] < gm) \
+                     & (offs_cn[None, :] < gn))
+
+            # go to the next tile by advancing NUM_SM
+            tile_idx += NUM_SM
+
+        # get ready to go to the next gemm problem
+        last_problem_end = last_problem_end + num_tiles
+
+
+## Group_a are tokens paced as [tokens routed to each expert, hidden_dimension].
+## Group_B are experts packed as [num_experts, expert_hidden_dim]. -> hid_dim could differ between experts.
+def group_gemm_fn(group_A, group_B, DEVICE):
+    assert len(group_A) == len(group_B)
+    group_size = len(group_A)
+
+    A_addrs = []
+    B_addrs = []
+    C_addrs = []
+    g_sizes = []
+    g_lds = []
+    group_C = []
+    for i in range(group_size):
+        A = group_A[i]
+        B = group_B[i]
+        assert A.shape[1] == B.shape[0]
+        M, K = A.shape
+        K, N = B.shape
+        C = torch.empty((M, N), device=DEVICE, dtype=A.dtype)
+        group_C.append(C)
+        A_addrs.append(A.data_ptr())
+        B_addrs.append(B.data_ptr())
+        C_addrs.append(C.data_ptr())
+        g_sizes += [M, N, K]
+        g_lds += [A.stride(0), B.stride(0), C.stride(0)]
+
+    # note these are device tensors
+    d_a_ptrs = torch.tensor(A_addrs, device=DEVICE)
+    d_b_ptrs = torch.tensor(B_addrs, device=DEVICE)
+    d_c_ptrs = torch.tensor(C_addrs, device=DEVICE)
+    d_g_sizes = torch.tensor(g_sizes, dtype=torch.int32, device=DEVICE)
+    d_g_lds = torch.tensor(g_lds, dtype=torch.int32, device=DEVICE)
+    # we use a fixed number of CTA, and it's auto-tunable
+    grid = lambda META: (META['NUM_SM'], )
+    grouped_matmul_kernel[grid](
+        d_a_ptrs,
+        d_b_ptrs,
+        d_c_ptrs,
+        d_g_sizes,
+        d_g_lds,
+        group_size,
+        activation="float16" if group_A[0].dtype == torch.float16  else "float32"
+    )
+
+    return group_C
+
+
+def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
+                 sizes: list[tuple[int, int, int]]) -> torch.Tensor:
+    assert len(sizes) <= 4, 'Current only support num_experts <= 4.'
+    assert len(x.shape) == 2, 'x should be 2-d tensor.'
+    assert len(w) == 4, 'w should be a list of 2-d tensors with pack factor=4.'
+    assert x.device == w[0].device, 'both tensors need to be on the same device.'
+    ## First, we have to re-shape the input. ##
+    slice_idxs = [i[0] for i in sizes]
+    x = torch.split(x, slice_idxs)
+    gemm_out = group_gemm_fn(x, w, x[0].device)
+    ## This is for debugging only, remove once finished. ##
+    ## We compare against pytorch ground-truth. ##
+    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    # for g_out, t_out in zip(gemm_out, torch_out):
+    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    return torch.cat(gemm_out, dim=0)
+
+
+if __name__ == '__main__':
+    ## Here, we test the correctness of the grouped_gemm kernel. ##
+
+    def test_case(ms: list[int], ns: list[int], ks: list[int], ty: torch.dtype):
+        assert ks[0] == ks[1] and ks[1] == ks[2] and ks[2] == ks[3], 'incorrect equality checks.'
+        grp_B = []
+        sizes = []
+        cum_size_a = 0
+        for one, two, three in zip(ms, ns, ks):
+            cum_size_a += one
+            b = torch.randn((three, two), dtype=ty, device="cuda" if torch.cuda.is_available() else "cpu")
+            sizes.append((one, two, three))
+            grp_B.append(b)
+
+        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
+
+
+    ## Since the most common case is expert_count = 4, we specifically test for that. ##
+    ## We do a mXk by a kXn mat-mul. ##
+    ## However, the model_dimension is kept constant through all ops. ##
+
+    ## Tiny test case in float32 for debugging. ##
+    ty : torch.dtype = torch.float32
+    m = [16, 16, 16, 16]
+    n = [16, 16, 16, 16]
+    k = [16, 16, 16, 16]
+    test_case(m, n, k, ty)
+
+    # ## Smaller test-case.
+    ty : torch.dtype = torch.float16
+    m = [97, 75, 49, 60]
+    n = [82, 82, 82, 82]  ## ffn_hidden_size.
+    k = [54, 54, 54, 54]  ## model hidden size.
+    test_case(m, n, k, ty)
+
+    # ## Larger test-case. More realisitc.
+    ty : torch.dtype = torch.float16
+    m = [1024, 256, 512, 190]
+    n = [512, 512, 512, 512]
+    k = [150, 150, 150, 150]
+    test_case(m, n, k, ty)
+

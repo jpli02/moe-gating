@@ -31,6 +31,7 @@ class Arguments:
 
     # MoE arguments.
     moe_num_experts: int = 1
+    moe_num_packed_experts: int = 4  ## Determines how many experts per device.
     moe_top_k: int = 1
     moe_capacity_factor: int = 1
     moe_normalize_expert_weights: Optional[Union[int, float]] = None
