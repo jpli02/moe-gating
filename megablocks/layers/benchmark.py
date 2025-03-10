@@ -331,8 +331,8 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     # x: [sl, bs, hs]
     # expert_weights: [sl * bs, top-k]
     # top_experts: [sl * bs, top-k]
-    x = torch.rand((seq_len, bs, hid_dim), dtype=torch.float16, device='cuda')
-    logits = torch.rand((seq_len * bs, expert_num), dtype=torch.float16, device='cuda')
+    x = torch.rand((seq_len, bs, hid_dim), dtype=torch.float32, device='cuda', requires_grad=True)
+    logits = torch.rand((seq_len * bs, expert_num), dtype=torch.float32, device='cuda', requires_grad=True)
     scores = logits.softmax(dim=-1)
     expert_weights, top_experts = torch.topk(scores, top_k, dim=-1)
     expert_weights = expert_weights.flatten()
@@ -385,7 +385,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
     #################################################################
     # test padded gather
 
-    x = x.view(-1, x.shape[-1], requires_grad=True)
+    x = x.view(-1, x.shape[-1])
 
     for _ in range(10):
         # Route the tokens for MoE computation.
@@ -399,10 +399,10 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
         )
         print(f'gather shape: {tmp.shape}, dtype: {tmp.dtype}')
 
-    incoming_gradients = torch.randn_like(tmp)
+    incoming_gradients = torch.randn_like(tmp, requires_grad=True)
 
     for _ in range(10):
-        tmp.backward(incoming_gradients)
+        tmp.backward(incoming_gradients, retain_graph=True)
 
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     torch.cuda.reset_peak_memory_stats()
@@ -422,7 +422,7 @@ def run_megablocks_seperate(top_k, expert_num, bs, seq_len, hid_dim):
         )
 
     for _ in range(10):
-        tmp.backward(incoming_gradients)
+        tmp.backward(incoming_gradients, retain_graph=True)
         
     torch.cuda.synchronize()  # Ensure all CUDA operations are finished
     end_time = time.time()
