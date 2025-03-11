@@ -18,6 +18,7 @@ sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/layers')
 import numpy as np
 import stk.ops
 import torch
+import pdb
 from stk import Matrix
 
 from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
@@ -159,6 +160,8 @@ if __name__ == '__main__':
         args_unpadded.moe_num_packed_experts = num_experts
         args_padded.hidden_size = hidden_dim 
         args_padded.moe_num_packed_experts = num_experts
+        args_unpadded.moe_top_k = num_experts
+        args_padded.moe_top_k = num_experts
         args_unpadded.mlp_impl = "OptGrouped"
         optMoE = OPTParallelDroplessMLP(args_unpadded)
         paddedMoE = dMoE(args_padded)
