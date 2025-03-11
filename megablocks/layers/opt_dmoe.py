@@ -1,14 +1,30 @@
 # Copyright 2024 Databricks
 # SPDX-License-Identifier: Apache-2.0
 
+import os
+import sys
+
+#sys.path.append(os.path.join(os.path.dirname(__file__), "..", "../ops", "."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+#sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ops"))
+#sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/ops')
+sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/')
+sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/layers')
+#sys.path.append(os.path.join(os.path.dirname(__file__), "..", "ops"))
+#sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
+
+
 import numpy as np
 import stk.ops
 import torch
 from stk import Matrix
 
-import megablocks.ops as ops
-from megablocks.layers import common, dmlp_registry, moe, mpu
-from megablocks.layers.arguments import Arguments
+from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
+#from ..ops import histogram
+#import megablocks.ops as ops
+from . import common, dmlp_registry, moe, mpu
+from .arguments import Arguments
 
 
 def promote_scalar(x):
@@ -38,14 +54,14 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
         # Sort the expert ids to produce the scatter/gather
         # indices for the permutation.
         top_experts = top_experts.int()
-        bin_ids, indices = ops.sort(top_experts, self.sort_end_bit)
+        bin_ids, indices = sort(top_experts, self.sort_end_bit)
 
         # Histogram the expert ids to identify the number of
         # tokens routed to each expert.
-        tokens_per_expert = ops.histogram(top_experts, self.num_experts)
+        tokens_per_expert = histogram(top_experts, self.num_experts)
 
         # Calculate the bin bounds for the sorted tokens.
-        bins = ops.inclusive_cumsum(tokens_per_expert, 0)
+        bins = inclusive_cumsum(tokens_per_expert, 0)
         bins = promote_scalar(bins)
         return indices, bin_ids, bins, tokens_per_expert
 
@@ -84,13 +100,13 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
 
         # Route the tokens for MoE computation.
         x = x.view(-1, x.shape[-1])
-        x = ops.gather(x, indices, bin_ids, bins, top_k)
+        x = gather(x, indices, bin_ids, bins, top_k)
 
         # Perform the expert computation.
         x = self.mlp(x, tokens_per_expert)
 
         # Un-route the data for the MoE output.
-        return ops.scatter(x, indices, bin_ids, expert_weights, bins, top_k)
+        return scatter(x, indices, bin_ids, expert_weights, bins, top_k)
 
     def forward_once(self, x, expert_weights, top_experts):
         assert self.args.mlp_impl == 'OptGrouped'
@@ -128,7 +144,7 @@ class OPTdMoE(moe.MoE):
 if __name__ == '__main__':
     ## Here we test our dropless no-padding moe. ##
     ## In the single GPU case we pack with 4 experts to a GPU. ##
-    from megablocks.layers.dmoe import dMoE
+    from .dmoe import dMoE
     args_unpadded = Arguments()
     args_padded = Arguments()
 
@@ -144,9 +160,10 @@ if __name__ == '__main__':
         args_padded.hidden_size = hidden_dim 
         args_padded.moe_num_packed_experts = num_experts
         args_unpadded.mlp_impl = "OptGrouped"
-        optMoE = OPTdMoE(args_unpadded)
+        optMoE = OPTParallelDroplessMLP(args_unpadded)
         paddedMoE = dMoE(args_padded)
-        topk_weights, topk_args = torch.topk(torch.nn.softmax(torch.randn((batch_size*num_tokens, num_experts)), axis=-1), k=num_experts)
+        sm = torch.nn.Softmax(dim=-1)
+        topk_weights, topk_args = torch.topk(sm(torch.randn((batch_size*num_tokens, num_experts), device="cuda" if torch.cuda.is_available() else "cpu")), k=num_experts)
         opt_res = optMoE.forward_once(x, topk_weights, topk_args)
         ground_truth = paddedMoE.forward_once(x, topk_weights, topk_args)
 

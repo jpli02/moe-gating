@@ -320,7 +320,7 @@ class UnPaddedMLP(torch.nn.Module):
             torch.empty((
                 args.hidden_size,
                 args.ffn_hidden_size
-            )
+            ),
                 device=args.device,
                 dtype=common.dtype(args),
             ),
@@ -330,7 +330,7 @@ class UnPaddedMLP(torch.nn.Module):
             torch.empty((
                 args.ffn_hidden_size,
                 args.hidden_size
-            )
+            ),
                 device=args.device,
                 dtype=common.dtype(args),
             ),
@@ -340,7 +340,7 @@ class UnPaddedMLP(torch.nn.Module):
 
 
     def forward(self, x: torch.Tensor, 
-                sizes: list[tuple[int, int int]]):
+                sizes: list[tuple[int, int, int]]):
 
         ## First, we call the forward pass simply. ##
         activ = GroupedGemm(x, self.w1, sizes)

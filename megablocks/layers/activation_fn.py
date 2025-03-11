@@ -12,7 +12,8 @@ def act_fn(
     function: Callable,
     return_grad_fn: bool = False,
     **kwargs,
-) -> Union[tuple[Matrix, Any] | Matrix]:
+#) -> Union[tuple[Matrix, Any] | Matrix]:
+) -> Any:
     assert isinstance(x, Matrix)
     with torch.set_grad_enabled(torch.is_grad_enabled() or return_grad_fn):
         if return_grad_fn:

@@ -6,9 +6,10 @@ import stk.ops
 import torch
 from stk import Matrix
 
-import megablocks.ops as ops
-from megablocks.layers import common, dmlp_registry, moe, mpu
-from megablocks.layers.arguments import Arguments
+from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
+#import megablocks.ops as ops
+from ..layers import common, dmlp_registry, moe, mpu
+from ..layers.arguments import Arguments
 
 
 def promote_scalar(x):
@@ -41,7 +42,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         # NOTE: Our sort operation uses the same width indices as the input values.
         # To avoid overflow when we have large activation matrices we cast to
         # 32-bit before sorting.
-        _, gather_indices = ops.sort(
+        _, gather_indices = sort(
             column_indices.int(),
             self.transpose_sort_end_bit,
         )
@@ -57,8 +58,8 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         block_offsets_t = gather_indices.int()
 
         zero = torch.zeros((1,), dtype=torch.int32, device=row_indices.device)
-        nnz_per_column = ops.histogram(column_indices, block_columns)
-        nnz_per_column = ops.inclusive_cumsum(nnz_per_column, 0)
+        nnz_per_column = histogram(column_indices, block_columns)
+        nnz_per_column = inclusive_cumsum(nnz_per_column, 0)
         if nnz_per_column.dim() == 0:
             # This addresses an edge case when ffn_hidden_size is equal to self.blocking.
             nnz_per_column = nnz_per_column.unsqueeze(0)
@@ -90,7 +91,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         # Indices for the sparse matrix. The indices for
         # the intermediate matrix are dynamic depending
         # on the mapping of tokens to experts.
-        column_indices = ops.topology(
+        column_indices = topology(
             padded_bins,
             self.blocking,
             block_rows,
@@ -132,24 +133,24 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         # Sort the expert ids to produce the scatter/gather
         # indices for the permutation.
         top_experts = top_experts.int()
-        bin_ids, indices = ops.sort(top_experts, self.sort_end_bit)
+        bin_ids, indices = sort(top_experts, self.sort_end_bit)
 
         # Histogram the expert ids to identify the number of
         # tokens routed to each expert.
-        tokens_per_expert = ops.histogram(top_experts, self.num_experts)
+        tokens_per_expert = histogram(top_experts, self.num_experts)
 
         # Round the token counts up to the block size used in
         # the matrix muliplications. Caculate the starting
         # position of each bin.
-        padded_tokens_per_expert = ops.round_up(
+        padded_tokens_per_expert = round_up(
             tokens_per_expert,
             self.blocking,
         )
-        padded_bins = ops.inclusive_cumsum(padded_tokens_per_expert, 0)
+        padded_bins = inclusive_cumsum(padded_tokens_per_expert, 0)
         padded_bins = promote_scalar(padded_bins)
 
         # Calculate the bin bounds for the sorted tokens.
-        bins = ops.inclusive_cumsum(tokens_per_expert, 0)
+        bins = inclusive_cumsum(tokens_per_expert, 0)
         bins = promote_scalar(bins)
         return indices, bin_ids, bins, padded_bins, tokens_per_expert
 
@@ -164,7 +165,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
 
         # Route the tokens for MoE computation.
         x = x.view(-1, x.shape[-1])
-        x = ops.padded_gather(
+        x = padded_gather(
             x,
             indices,
             bin_ids,
@@ -181,7 +182,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         x = self.mlp(x, topo)
 
         # Un-route the data for the MoE output.
-        x = ops.padded_scatter(
+        x = padded_scatter(
             x,
             indices,
             bin_ids,
@@ -207,16 +208,16 @@ class ParallelDroplessMLP(moe.ParallelMLP):
 
         # Round the token counts up to the block size used in the matrix
         # multiplication. Calculate the starting position of each bin.
-        padded_tokens_per_expert = ops.round_up(
+        padded_tokens_per_expert = round_up(
             tokens_per_expert,
             self.blocking,
         )
-        padded_bins = ops.inclusive_cumsum(padded_tokens_per_expert, 0)
+        padded_bins = inclusive_cumsum(padded_tokens_per_expert, 0)
         padded_bins = promote_scalar(padded_bins)
 
         # Route the tokens for MoE computation.
         x = x.view(-1, x.shape[-1])
-        x = ops.padded_gather(x, indices, bin_ids, bins, padded_bins, top_k)
+        x = padded_gather(x, indices, bin_ids, bins, padded_bins, top_k)
 
         # Create the sparse matrix topology.
         with torch.no_grad():
@@ -226,7 +227,7 @@ class ParallelDroplessMLP(moe.ParallelMLP):
         x = self.mlp(x, topo)
 
         # Un-route the data for the MoE output.
-        return ops.padded_scatter(
+        return padded_scatter(
             x,
             indices,
             bin_ids,
@@ -271,13 +272,13 @@ class ParallelDroplessMLP(moe.ParallelMLP):
 
         # Route the tokens for MoE computation.
         x = x.view(-1, x.shape[-1])
-        x = ops.gather(x, indices, bin_ids, bins, top_k)
+        x = gather(x, indices, bin_ids, bins, top_k)
 
         # Perform the expert computation.
         x = self.mlp(x, tokens_per_expert)
 
         # Un-route the data for the MoE output.
-        return ops.scatter(x, indices, bin_ids, expert_weights, bins, top_k)
+        return scatter(x, indices, bin_ids, expert_weights, bins, top_k)
 
     def forward_once(self, x, expert_weights, top_experts):
         if self.args.mlp_impl == 'sparse':
