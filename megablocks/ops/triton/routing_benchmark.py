@@ -72,7 +72,7 @@ def log_benchmark_CUDA(arguments, mean_t, std_t):
     print('=' * 60)
 
 
-@torch.compile
+# @torch.compile
 def routing_torch(top_experts, end_bit, expert_num):
     # torch kernel
     top_experts = top_experts.int()
