@@ -16,6 +16,8 @@ from megablocks.ops.sort import sort
 from megablocks.ops.sum import sum
 from megablocks.ops.topology import topology
 
+from megablocks.ops.triton.histogram import histogram_triton
+
 __all__ = [
     'binned_gather',
     'binned_scatter',
@@ -32,4 +34,5 @@ __all__ = [
     'sort',
     'sum',
     'topology',
+    'histogram_triton'
 ]
