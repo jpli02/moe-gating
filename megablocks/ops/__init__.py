@@ -16,7 +16,7 @@ from megablocks.ops.sort import sort
 from megablocks.ops.sum import sum
 from megablocks.ops.topology import topology
 
-from megablocks.ops.triton.histogram import histogram_triton
+from megablocks.ops.triton import histogram_triton
 
 __all__ = [
     'binned_gather',
