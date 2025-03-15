@@ -346,10 +346,9 @@ class UnPaddedMLP(torch.nn.Module):
         ## First, we call the forward pass simply. ##
         activ = GroupedGemm(x, self.w1, sizes)
 
-        pdb.set_trace()
         inter_sizes = [(i[0], self.args.hidden_size, self.args.ffn_hidden_size) for i in sizes]
-        second_activs = GroupedGemm([self.activation_fn(i) for i in activ], w2, inter_sizes)
-        return torch.cat(second_activ, dim=0)
+        second_activs = GroupedGemm(self.activation_fn(activ), self.w2, inter_sizes)
+        return second_activs
 
 
 class SparseMLP(torch.nn.Module):

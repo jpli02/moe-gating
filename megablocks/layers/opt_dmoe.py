@@ -24,7 +24,7 @@ from stk import Matrix
 from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
 #from ..ops import histogram
 #import megablocks.ops as ops
-from . import common, dmlp_registry, moe, mpu
+from . import common, dmlp_registry, moe, mpu, dmoe
 from .arguments import Arguments
 
 
@@ -42,6 +42,7 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
         self.ffn_hidden_size = mpu.features_per_rank(args)
         self.blocking = 128
         self.mlp = dmlp_registry.get(args)
+        self.args = args
 
         # Calculate the number of bits needed to represent the column indices
         # in the intermediate sparse matrix.
@@ -65,6 +66,17 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
         bins = inclusive_cumsum(tokens_per_expert, 0)
         bins = promote_scalar(bins)
         return indices, bin_ids, bins, tokens_per_expert
+
+    def generate_sizes(self, tokens_per_expert):
+        """Takes histogram and produces sizes list that's comprehensible by the no-padded MLP layer.
+        """
+        m = tokens_per_expert.tolist()
+        n = [self.ffn_hidden_size for _ in range(self.args.moe_num_packed_experts)]
+        k = [self.hidden_size for _ in range(self.args.moe_num_packed_experts)]
+
+        mlp_sizes = [(a, b, c) for a, b, c in zip(m, n, k)]
+
+        return mlp_sizes
 
     def grouped_forward_once(self, x, expert_weights, top_experts):
         # x: [sl, bs, hs]
@@ -104,7 +116,7 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
         x = gather(x, indices, bin_ids, bins, top_k)
 
         # Perform the expert computation.
-        x = self.mlp(x, tokens_per_expert)
+        x = self.mlp(x, self.generate_sizes(tokens_per_expert))
 
         # Un-route the data for the MoE output.
         return scatter(x, indices, bin_ids, expert_weights, bins, top_k)
@@ -166,16 +178,21 @@ if __name__ == '__main__':
         args_padded.moe_top_k = num_experts
         args_unpadded.mlp_impl = "OptGrouped"
         optMoE = OPTParallelDroplessMLP(args_unpadded)
-        paddedMoE = dMoE(args_padded)
+        paddedMoE = dmoe.ParallelDroplessMLP(args_padded)
         sm = torch.nn.Softmax(dim=-1)
         topk_weights, topk_args = torch.topk(sm(torch.randn((batch_size*num_tokens, num_experts), device="cuda" if torch.cuda.is_available() else "cpu")), k=num_experts)
         opt_res = optMoE.forward_once(x, topk_weights, topk_args)
         ground_truth = paddedMoE.forward_once(x, topk_weights, topk_args)
+        pdb.set_trace()
 
         print(f'max diff: {torch.abs(opt_res - ground_truth).max().item()}')
-
+    """
+    Certain constraints on megablocks:
+        - m and n and k need to be multiples of 128.
+        - only works on float16 (though this may be due to improper calling -> need to investigate).
+    """
 
     ## Try a sample test case on 32-bit precision, easy for debugging. ##
-    test_case(1, 32, 32, 4, torch.float32, args_unpadded, args_padded)
+    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
     
