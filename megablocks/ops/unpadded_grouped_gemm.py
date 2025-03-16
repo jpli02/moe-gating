@@ -28,11 +28,13 @@ class GroupedGemm(torch.autograd.Function):
 
         with torch.no_grad():
             slice_idxs = [i[0] for i in ctx.sizes]
+
         sliced_xs = torch.split(ctx.x, slice_idxs)
         sliced_grads = torch.split(grads, slice_idxs)
         dw = [
             torch.matmul(torch.transpose(a, 0, 1), b) for a, b in zip(sliced_xs, sliced_grads)
         ]
+
 
         return dx, dw[0], dw[1], dw[2], dw[3], None
 

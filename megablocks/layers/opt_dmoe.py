@@ -22,6 +22,7 @@ import pdb
 from stk import Matrix
 from functools import partial
 import time
+import pdb
 
 from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
 #from ..ops import histogram
@@ -238,12 +239,10 @@ if __name__ == '__main__':
         torch.cuda.synchronize()
         end = time.time()
 
+        ## We call one more time with everything zeroed. ##
+
         print(f'bwd non-opt num_tokens: {num_tokens}, hidden_dim: {hidden_dim}, time: {(end-start)/10}')
         
-        # print(f'opt result: {opt_res[0]}')
-        # print(f'non-opt result: {ground_truth[0]}')
-        # print(f'opt grad: {x.grad}')
-        # print(f'non-opt grad: {x_torch.grad}')
         print(f'max diff, fwd: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
         print(f'max diff inps, bwd: {torch.abs(x.grad - x_torch.grad).max().item()}')
     """
@@ -258,9 +257,9 @@ if __name__ == '__main__':
     args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
     args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
     args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    # test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
     test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
 
