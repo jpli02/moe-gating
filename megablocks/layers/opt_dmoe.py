@@ -170,7 +170,8 @@ if __name__ == '__main__':
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
         x = torch.randn((batch_size, num_tokens, hidden_dim), 
-                        dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu")
+                        dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True)
+        x_torch = x.clone().detach().requires_grad_(True)
         args_unpadded.hidden_size = hidden_dim 
         args_unpadded.moe_num_packed_experts = num_experts
         args_padded.hidden_size = hidden_dim 
@@ -181,11 +182,6 @@ if __name__ == '__main__':
         args_padded.moe_top_k = num_experts
         args_unpadded.mlp_impl = "OptGrouped"
 
-        ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
-        args_padded.init_method = partial(torch.nn.init.constant_, val=0.1)
-        args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-        args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
-        args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
         optMoE = OPTParallelDroplessMLP(args_unpadded)
@@ -195,11 +191,17 @@ if __name__ == '__main__':
         sm = torch.nn.Softmax(dim=-1)
         topk_weights, topk_args = torch.topk(sm(torch.randn((batch_size*num_tokens, num_experts), device="cuda" if torch.cuda.is_available() else "cpu")), k=num_experts)
         opt_res = optMoE.forward_once(x, topk_weights, topk_args)
-        ground_truth = paddedMoE.forward_once(x, topk_weights, topk_args)
+        ground_truth = paddedMoE.forward_once(x_torch, topk_weights, topk_args)
+
+        incoming_grads = torch.randn_like(opt_res[0])
+
+        opt_res[0].backward(incoming_grads)
+        ground_truth[0].backward(incoming_grads)
         
         print(f'opt result: {opt_res[0]}')
         print(f'non-opt result: {ground_truth[0]}')
-        print(f'max diff: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
+        print(f'max diff, fwd: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
+        print(f'max diff, bwd: {torch.abs(x.grad - x_torch.grad)}')
     """
     Certain constraints on megablocks:
         - m and n and k need to be multiples of 128.
@@ -207,6 +209,11 @@ if __name__ == '__main__':
     """
 
     ## Try a sample test case on 32-bit precision, easy for debugging. ##
+    ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
+    args_padded.init_method = partial(torch.nn.init.constant_, val=0.1)
+    args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
+    args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
+    args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
     test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
     test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
