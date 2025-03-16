@@ -54,18 +54,15 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
         )
 
     def indices_and_padded_bins(self, top_experts):
-        # Sort the expert ids to produce the scatter/gather
-        # indices for the permutation.
         top_experts = top_experts.int()
-        bin_ids, indices = sort(top_experts, self.sort_end_bit)
+        bin_ids, indices = torch.sort(top_experts)
 
         # Histogram the expert ids to identify the number of
         # tokens routed to each expert.
-        tokens_per_expert = histogram(top_experts, self.num_experts)
-
+        tokens_per_expert = torch.histc(top_experts, self.num_experts, 0, self.num_experts - 1)
+        
         # Calculate the bin bounds for the sorted tokens.
-        bins = inclusive_cumsum(tokens_per_expert, 0)
-        bins = promote_scalar(bins)
+        bins = torch.cumsum(tokens_per_expert, 0)
         return indices, bin_ids, bins, tokens_per_expert
 
     def generate_sizes(self, tokens_per_expert):
