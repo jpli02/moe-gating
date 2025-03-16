@@ -71,13 +71,14 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
     def generate_sizes(self, tokens_per_expert):
         """Takes histogram and produces sizes list that's comprehensible by the no-padded MLP layer.
         """
-        m = tokens_per_expert.tolist()
-        n = [self.ffn_hidden_size for _ in range(self.args.moe_num_packed_experts)]
-        k = [self.hidden_size for _ in range(self.args.moe_num_packed_experts)]
+        with torch.no_grad():
+            m = tokens_per_expert.tolist()
+            n = [self.ffn_hidden_size for _ in range(self.args.moe_num_packed_experts)]
+            k = [self.hidden_size for _ in range(self.args.moe_num_packed_experts)]
 
-        mlp_sizes = [(a, b, c) for a, b, c in zip(m, n, k)]
+            mlp_sizes = [(a, b, c) for a, b, c in zip(m, n, k)]
 
-        return mlp_sizes
+            return mlp_sizes
 
     def grouped_forward_once(self, x, expert_weights, top_experts):
         # x: [sl, bs, hs]

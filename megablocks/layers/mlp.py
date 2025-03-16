@@ -317,26 +317,25 @@ class UnPaddedMLP(torch.nn.Module):
         ## We have to restructure the experts. ##
         ## Store them as a list at init time to avoid 
         ## extra per iteration overhead. ##
-        with torch.no_grad():
-            self.w1 = [torch.nn.Parameter(
-                self.args.init_method(torch.empty((
-                    args.hidden_size,
-                    args.ffn_hidden_size
-                ),
-                    device=args.device,
-                    dtype=common.dtype(args),
-                )),
-            ) for _ in range(args.moe_num_packed_experts)]
+        self.w1 = [torch.nn.Parameter(
+            self.args.init_method(torch.empty((
+                args.hidden_size,
+                args.ffn_hidden_size
+            ),
+                device=args.device,
+                dtype=common.dtype(args),
+            )),
+        ) for _ in range(args.moe_num_packed_experts)]
 
-            self.w2 = [self.args.output_layer_init_method(torch.nn.Parameter(
-                self.args.output_layer_init_method(torch.empty((
-                    args.ffn_hidden_size,
-                    args.hidden_size
-                ),
-                    device=args.device,
-                    dtype=common.dtype(args),
-                )),
-            )) for _ in range(args.moe_num_packed_experts)]
+        self.w2 = [torch.nn.Parameter(
+            self.args.output_layer_init_method(torch.empty((
+                args.ffn_hidden_size,
+                args.hidden_size
+            ),
+                device=args.device,
+                dtype=common.dtype(args),
+            )),
+        ) for _ in range(args.moe_num_packed_experts)]
 
         self.activation_fn = args.activation_fn
 

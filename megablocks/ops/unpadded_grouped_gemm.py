@@ -1,5 +1,6 @@
 import torch
 from megablocks.backend.kernels import grouped_gemm
+import pdb
 
 
 class GroupedGemm(torch.autograd.Function):
@@ -20,15 +21,16 @@ class GroupedGemm(torch.autograd.Function):
         ## Gradient of w = x^Td0.
         dx = grouped_gemm(
             grads, 
-            [torch.transpose(local_w) for local_w in ctx.w],
+            [torch.transpose(local_w, 0, 1) for local_w in ctx.w],
             [(m, k, n) for m, n, k in ctx.sizes]
             )
 
-        slice_idxs = [i[0] for i in ctx.sizes]
+        with torch.no_grad():
+            slice_idxs = [i[0] for i in ctx.sizes]
         sliced_xs = torch.split(ctx.x, slice_idxs)
         sliced_grads = torch.split(grads, slice_idxs)
         dw = [
-            torch.matmul(a, b) for a, b in zip(sliced_xs, sliced_grads)
+            torch.matmul(torch.transpose(a, 0, 1), b) for a, b in zip(sliced_xs, sliced_grads)
         ]
 
         return dx, dw, None
