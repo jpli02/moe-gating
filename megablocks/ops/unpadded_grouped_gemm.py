@@ -6,8 +6,9 @@ import pdb
 class GroupedGemm(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, x: torch.Tensor, w: list[torch.Tensor], sizes: list[tuple[int, int, int]]):
+    def forward(ctx, x: torch.Tensor, wa: torch.Tensor, wb: torch.Tensor, wc: torch.Tensor, wd: torch.Tensor, sizes: list[tuple[int, int, int]]):
         ctx.x = x
+        w = [wa, wb, wc, wd]
         ctx.w = w
         ctx.sizes = sizes
         return grouped_gemm(x, w, sizes)
@@ -33,7 +34,7 @@ class GroupedGemm(torch.autograd.Function):
             torch.matmul(torch.transpose(a, 0, 1), b) for a, b in zip(sliced_xs, sliced_grads)
         ]
 
-        return dx, dw, None
+        return dx, (*dw,), None
 
 
 GroupedGemm = GroupedGemm.apply

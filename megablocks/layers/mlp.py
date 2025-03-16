@@ -337,6 +337,12 @@ class UnPaddedMLP(torch.nn.Module):
             )),
         ) for _ in range(args.moe_num_packed_experts)]
 
+        assert len(self.w1) == len(self.w2) and len(self.w1) == 4, 'Needs 4-way expert packing.'
+
+        ## Create individual pointers, required for backprop only. ##
+        self.w1_a, self.w1_b, self.w1_c, self.w1_d = (*self.w1,)
+        self.w2_a, self.w2_b, self.w2_c, self.w2_d = (*self.w2,)
+
         self.activation_fn = args.activation_fn
 
 
@@ -344,10 +350,10 @@ class UnPaddedMLP(torch.nn.Module):
                 sizes: list[tuple[int, int, int]]):
 
         ## First, we call the forward pass simply. ##
-        activ = GroupedGemm(x, self.w1, sizes)
+        activ = GroupedGemm(x, self.w1_a, self.w1_b, self.w1_c, self.w1_d, sizes)
 
         inter_sizes = [(i[0], self.args.hidden_size, self.args.ffn_hidden_size) for i in sizes]
-        second_activs = GroupedGemm(self.activation_fn(activ), self.w2, inter_sizes)
+        second_activs = GroupedGemm(self.activation_fn(activ), self.w2_a, self.w2_b, self.w2_c, self.w2_d, inter_sizes)
         return second_activs
 
 
