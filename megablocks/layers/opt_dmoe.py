@@ -15,6 +15,7 @@ sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/layers')
 #sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 
+from typing import Tuple
 import numpy as np
 import torch
 from functools import partial
@@ -30,16 +31,20 @@ def promote_scalar(x):
     return x.view(1) if not len(x.size()) else x
 
 
-class OPTParallelDroplessMLP(moe.ParallelMLP):
+#class OPTParallelDroplessMLP(moe.ParallelMLP):
+class OPTParallelDroplessMLP(torch.nn.Module):
 
     def __init__(self, args: Arguments):
         assert args.mlp_impl == 'OptGrouped', 'Must be called with OptGrouped impl.'
         assert args.mlp_type == 'mlp', 'Must be an MLP layer'
-        super(OPTParallelDroplessMLP, self).__init__(args)
+        #super(OPTParallelDroplessMLP, self).__init__(args)
+        super(OPTParallelDroplessMLP, self).__init__()
         self.hidden_size = args.hidden_size
         self.ffn_hidden_size = mpu.features_per_rank(args)
         self.blocking = 128
         self.mlp = dmlp_registry.get(args)
+        self.num_experts = args.moe_num_experts
+        self.top_k = args.moe_top_k
         self.args = args
 
         # Calculate the number of bits needed to represent the column indices
@@ -50,17 +55,35 @@ class OPTParallelDroplessMLP(moe.ParallelMLP):
             1,
         )
 
-    def indices_and_padded_bins(self, top_experts):
-        top_experts = top_experts.int()
-        bin_ids, indices = torch.sort(top_experts)
+        self.sort_end_bit = max(int(np.ceil(np.log2(self.num_experts))), 1)
+
+
+    def indices_and_bins(self, top_expert: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        # Sort the expert ids to produce the scatter/gather
+        # indices for the permutation.
+        #
+        # TODO(tgale): Is it worth doing this conversion to 32-bit
+        # prior? Could we place the `torch.max` operation to return
+        # 32-bit expert indices?
+        top_expert = top_expert.int()
+        output = torch.sort(top_expert)
+        assert output is not None
+        bin_ids, indices = output
 
         # Histogram the expert ids to identify the number of
         # tokens routed to each expert.
-        tokens_per_expert = torch.histc(top_experts, self.num_experts, 0, self.num_experts - 1)
-        
+        #
+        # TODO(tgale): Does the sorted data produce a more favorable
+        # data distribution for histogram? Or is the op parallelism
+        # worth more?
+        tokens_per_expert = torch.histc(top_expert, self.num_experts, 0, self.num_experts - 1)
+
         # Calculate the bin bounds for the sorted tokens.
         bins = torch.cumsum(tokens_per_expert, 0)
-        return indices, bin_ids, bins, tokens_per_expert
+        assert bins is not None
+        bins = bins.view(1) if not len(bins.size()) else bins
+
+        return indices, bin_ids, bins.int(), tokens_per_expert
 
     def generate_sizes(self, tokens_per_expert):
         """Takes histogram and produces sizes list that's comprehensible by the no-padded MLP layer.
@@ -252,18 +275,18 @@ if __name__ == '__main__':
     args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
     args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
     args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    # test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
     test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
 
     ## More aggressive test cases with random init from normal distribution. ##
-    args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    # args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
 
     
