@@ -61,7 +61,7 @@ def create_moe_expert_weights(
         device=args.device,
         dtype=common.dtype(args),
     )
-    # pdb.set_trace()
+    pdb.set_trace()
     init_method(master_weights)
 
     if not args.moe_expert_model_parallelism:
@@ -340,11 +340,11 @@ class UnPaddedMLP(torch.nn.Module):
             )),
         ) for _ in range(args.moe_num_packed_experts)]
 
-        # print(f'w1 no-padded mlp: {self.w1}')
-        # print(f'w2 no-padded mlp: {self.w2}')
+        print(f'w1 no-padded mlp: {self.w1}')
+        print(f'w2 no-padded mlp: {self.w2}')
 
-        # print(f'w1 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w1, 0)}')
-        # print(f'w2 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w2, 0)}')
+        print(f'w1 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w1, 0)}')
+        print(f'w2 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w2, 0)}')
 
         assert len(self.w1) == len(self.w2) and len(self.w1) == 4, 'Needs 4-way expert packing.'
 
@@ -418,13 +418,13 @@ class SparseMLP(torch.nn.Module):
                 ),
             )
 
-        # print(f'w1 weights sparse-mlp: {self.w1}')
+        print(f'w1 weights sparse-mlp: {self.w1}')
 
-        # print(f'w2 weights sparse-mlp: {self.w2}')
+        print(f'w2 weights sparse-mlp: {self.w2}')
 
-        # print(f'w1 sparse-mlp sum: {self.w1.sum()}')
+        print(f'w1 sparse-mlp sum: {self.w1.sum()}')
 
-        # print(f'w2 sparse-mlp sum: {self.w2.sum()}')
+        print(f'w2 sparse-mlp sum: {self.w2.sum()}')
 
         self._should_set_parallelism_attribute = args.moe_expert_model_parallelism
         mpu.set_expert_model_parallel_attributes(
