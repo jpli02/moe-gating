@@ -81,7 +81,7 @@ def routing_torch(top_experts, end_bit, expert_num):
     # Histogram the expert ids to identify the number of
     # tokens routed to each expert.
     # tokens_per_expert = torch.histc(top_experts, expert_num, 0, expert_num - 1)
-    tokens_per_expert = ops.histogram_triton(top_experts, expert_num)
+    # tokens_per_expert = ops.histogram_triton(top_experts, expert_num)
     
     # Calculate the bin bounds for the sorted tokens.
     bins = torch.cumsum(tokens_per_expert, 0)
