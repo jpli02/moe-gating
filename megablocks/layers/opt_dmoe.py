@@ -16,17 +16,12 @@ sys.path.insert(0, '/home/exouser/Desktop/moe-gating/megablocks/layers')
 
 
 import numpy as np
-import stk.ops
 import torch
-import pdb
-from stk import Matrix
 from functools import partial
 import time
 
-from ..ops import histogram, sort, inclusive_cumsum, topology, padded_scatter, padded_gather, gather, scatter, round_up
-#from ..ops import histogram
-#import megablocks.ops as ops
-from . import common, dmlp_registry, moe, mpu, dmoe
+from ..ops import gather, scatter 
+from . import dmlp_registry, moe, mpu, dmoe
 from .arguments import Arguments
 
 
@@ -252,7 +247,7 @@ if __name__ == '__main__':
         - only works on float16 (though this may be due to improper calling -> need to investigate).
     """
 
-    ## Try a sample test case on 32-bit precision, easy for debugging. ##
+    ## Try a sample test case on 16-bit precision, easy for debugging. ##
     ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
     args_padded.init_method = partial(torch.nn.init.constant_, val=0.1)
     args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
@@ -263,5 +258,13 @@ if __name__ == '__main__':
     test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
     test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
+
+    ## More aggressive test cases with random init from normal distribution. ##
+    args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+
 
     
