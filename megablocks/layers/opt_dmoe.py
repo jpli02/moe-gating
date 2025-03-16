@@ -199,10 +199,12 @@ if __name__ == '__main__':
         opt_res[0].backward(incoming_grads)
         ground_truth[0].backward(incoming_grads)
         
-        print(f'opt result: {opt_res[0]}')
-        print(f'non-opt result: {ground_truth[0]}')
+        # print(f'opt result: {opt_res[0]}')
+        # print(f'non-opt result: {ground_truth[0]}')
+        print(f'opt grad: {x.grad}')
+        print(f'non-opt grad: {x_torch.grad}')
         print(f'max diff, fwd: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
-        print(f'max diff, bwd: {torch.abs(x.grad - x_torch.grad)}')
+        print(f'max diff inps, bwd: {torch.abs(x.grad - x_torch.grad).max().item()}')
     """
     Certain constraints on megablocks:
         - m and n and k need to be multiples of 128.
