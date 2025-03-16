@@ -176,12 +176,12 @@ if __name__ == '__main__':
         args_unpadded.hidden_size = hidden_dim 
         args_unpadded.moe_num_packed_experts = num_experts
         args_padded.hidden_size = hidden_dim 
-        args_padded.moe_num_packed_experts = num_experts
+        args_padded.moe_num_packed_experts = num_experts  ## Extra thing to set.
         args_padded.moe_num_experts = num_experts
         args_unpadded.moe_num_experts = num_experts
         args_unpadded.moe_top_k = num_experts
         args_padded.moe_top_k = num_experts
-        args_unpadded.mlp_impl = "OptGrouped"
+        args_unpadded.mlp_impl = "OptGrouped"  ## Extra thing to set.
 
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
