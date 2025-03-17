@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from absl.testing import parameterized
 
-from megablocks import ops
+# from megablocks import ops
 
 _CUDA_TESTS = (
     (16384, torch.int32, 1),
@@ -88,18 +88,18 @@ def routing_torch(top_experts, end_bit, expert_num):
     return indices, bin_ids, bins, tokens_per_expert
 
 def routing_CDUA(top_experts, end_bit, expert_num):
-    # Sort the expert ids to produce the scatter/gather
-    # indices for the permutation.
-    top_experts = top_experts.int()
-    bin_ids, indices = ops.sort(top_experts, end_bit)
+    # # Sort the expert ids to produce the scatter/gather
+    # # indices for the permutation.
+    # top_experts = top_experts.int()
+    # bin_ids, indices = ops.sort(top_experts, end_bit)
 
-    # Histogram the expert ids to identify the number of
-    # tokens routed to each expert.
-    tokens_per_expert = ops.histogram(top_experts, expert_num)
+    # # Histogram the expert ids to identify the number of
+    # # tokens routed to each expert.
+    # tokens_per_expert = ops.histogram(top_experts, expert_num)
 
-    # Calculate the bin bounds for the sorted tokens.
-    bins = ops.inclusive_cumsum(tokens_per_expert, 0)
-    return indices, bin_ids, bins, tokens_per_expert
+    # # Calculate the bin bounds for the sorted tokens.
+    # bins = ops.inclusive_cumsum(tokens_per_expert, 0)
+    # return indices, bin_ids, bins, tokens_per_expert
 
 class RouteBenchmark(parameterized.TestCase):
 
