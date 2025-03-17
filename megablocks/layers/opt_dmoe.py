@@ -268,14 +268,14 @@ if __name__ == '__main__':
         opt_w1_grads = 0
         opt_w2_grads = 0
         for w1 in optMoE.mlp.w1:
-            opt_w1_grads += w1.grad.sum()
+            opt_w1_grads += w1.grad.double().sum()
 
         for w2 in optMoE.mlp.w2:
-            opt_w2_grads += w2.grad.sum()
+            opt_w2_grads += w2.grad.double().sum()
 
-        nonopt_w1_grads = paddedMoE.mlp.w1.grad.sum()
+        nonopt_w1_grads = paddedMoE.mlp.w1.grad.double().sum()
 
-        nonopt_w2_grads = paddedMoE.mlp.w2.grad.sum()
+        nonopt_w2_grads = paddedMoE.mlp.w2.grad.double().sum()
 
         print(f'avg diff w1 grads: {torch.abs(opt_w1_grads - nonopt_w1_grads)/(args_padded.ffn_hidden_size * args_padded.hidden_size)}')
         print(f'avg diff w2 grads: {torch.abs(opt_w2_grads - nonopt_w2_grads)/(args_padded.ffn_hidden_size * args_padded.hidden_size)}')
@@ -292,18 +292,18 @@ if __name__ == '__main__':
     args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
     args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
     args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    # test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    # test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
+    test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
 
     ## More aggressive test cases with random init from normal distribution. ##
-    args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    # args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
 
     
