@@ -354,11 +354,11 @@ if __name__ == '__main__':
     args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
     args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
     args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    # test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+    test_case(6, 128, 128, 4, torch.float16, args_unpadded, args_padded)
 
-    # test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
+    test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
 
 
     ## More aggressive test cases with random init from normal distribution. ##
