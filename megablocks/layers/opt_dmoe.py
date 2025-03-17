@@ -180,7 +180,7 @@ if __name__ == '__main__':
     args_unpadded = Arguments()
     args_padded = Arguments()
 
-    ## Construct fake input and test. ##
+    ## Construct fake input and test. for correctness ONLY. ##
     def test_case(batch_size: int, num_tokens: int, hidden_dim: int, 
                   num_experts: int, dtype: torch.dtype, 
                   args_unpadded: Arguments,
@@ -208,59 +208,37 @@ if __name__ == '__main__':
         paddedMoE = dmoe.ParallelDroplessMLP(args_padded)
         sm = torch.nn.Softmax(dim=-1)
         topk_weights, topk_args = torch.topk(sm(torch.randn((batch_size*num_tokens, num_experts), device="cuda" if torch.cuda.is_available() else "cpu")), k=num_experts)
-        for _ in range(5):
-            opt_res = optMoE.forward_once(x, topk_weights, topk_args)
 
         torch.cuda.synchronize()
         start = time.time()
-        for _ in range(10):
+        for _ in range(1):
             opt_res = optMoE.forward_once(x, topk_weights, topk_args)
         torch.cuda.synchronize()
         end = time.time()
-        
-        print(f'fwd opt num_tokens: {num_tokens}, hidden_dim: {hidden_dim}, time: {(end-start)/10}')
-
-        for _ in range(5):
-            ground_truth = paddedMoE.forward_once(x_torch, topk_weights, topk_args)
 
         torch.cuda.synchronize()
         start = time.time()
-        for _ in range(10):
+        for _ in range(1):
             ground_truth = paddedMoE.forward_once(x_torch, topk_weights, topk_args)
         torch.cuda.synchronize()
         end = time.time()
-
-        print(f'fwd non-opt num_tokens: {num_tokens}, hidden_dim: {hidden_dim}, time: {(end-start)/10}')
 
         incoming_grads = torch.randn_like(opt_res[0])
 
-        for _ in range(5):
-            opt_res[0].backward(incoming_grads, retain_graph=True)
-
         torch.cuda.synchronize()
         start = time.time()
-        for _ in range(10):
+        for _ in range(1):
             opt_res[0].backward(incoming_grads, retain_graph=True)
         torch.cuda.synchronize()
         end = time.time()
 
-        print(f'bwd opt num_tokens: {num_tokens}, hidden_dim: {hidden_dim}, time: {(end-start)/10}')
-
-        for _ in range(5):
-            ground_truth[0].backward(incoming_grads, retain_graph=True)
-
-
         torch.cuda.synchronize()
         start = time.time()
-        for _ in range(10):
+        for _ in range(1):
             ground_truth[0].backward(incoming_grads, retain_graph=True)
         torch.cuda.synchronize()
         end = time.time()
 
-        ## We call one more time with everything zeroed. ##
-
-        print(f'bwd non-opt num_tokens: {num_tokens}, hidden_dim: {hidden_dim}, time: {(end-start)/10}')
-        
         print(f'max diff, fwd: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
         print(f'max diff inps, bwd: {torch.abs(x.grad - x_torch.grad).max().item()}')
 
