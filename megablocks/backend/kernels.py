@@ -742,18 +742,17 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     return group_C
 
 
+## TODO(ahangupta): add support for Zeroed out experts. ##
 def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
                  sizes: list[tuple[int, int, int]]) -> torch.Tensor:
-    assert len(sizes) <= 4, 'Current only support num_experts <= 4.'
     assert len(x.shape) == 2, 'x should be 2-d tensor.'
-    assert len(w) == 4, 'w should be a list of 2-d tensors with pack factor=4.'
     assert x.device == w[0].device, 'both tensors need to be on the same device.'
     ## First, we have to re-shape the input. ##
     slice_idxs = [i[0] for i in sizes]
     x = torch.split(x, slice_idxs)
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
-    ## We compare against pytorch ground-truth. ##
+    ## We compare against pytorch ground-truth. For debugging only. ##
     # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
     # for g_out, t_out in zip(gemm_out, torch_out):
     #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
@@ -764,7 +763,6 @@ if __name__ == '__main__':
     ## Here, we test the correctness of the grouped_gemm kernel. ##
 
     def test_case(ms: list[int], ns: list[int], ks: list[int], ty: torch.dtype):
-        assert ks[0] == ks[1] and ks[1] == ks[2] and ks[2] == ks[3], 'incorrect equality checks.'
         grp_B = []
         sizes = []
         cum_size_a = 0

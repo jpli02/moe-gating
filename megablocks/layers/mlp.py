@@ -345,6 +345,8 @@ class UnPaddedMLP(torch.nn.Module):
             )),
         ) for _ in range(args.moe_num_packed_experts)]
 
+        self.w1 = torch.cat(self.w1, dim=0)
+
         self.w2 = [torch.nn.Parameter(
             self.args.output_layer_init_method(torch.empty((
                 args.ffn_hidden_size,
@@ -354,6 +356,8 @@ class UnPaddedMLP(torch.nn.Module):
                 dtype=common.dtype(args),
             )),
         ) for _ in range(args.moe_num_packed_experts)]
+
+        self.w2 = torch.cat(self.w2, dim=0)
 
         ## Slightly buggy for now. TODO(ahangupta): debug. ##
         # self.w1 = prepare_weights(self.args.init_method, args, True)
@@ -365,11 +369,11 @@ class UnPaddedMLP(torch.nn.Module):
         # print(f'w1 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w1, 0)}')
         # print(f'w2 no-padded mlp sum: {reduce(lambda x, y: x+y.sum(), self.w2, 0)}')
 
-        assert len(self.w1) == len(self.w2) and len(self.w1) == 4, 'Needs 4-way expert packing.'
+        #assert len(self.w1) == len(self.w2) and len(self.w1) == 4, 'Needs 4-way expert packing.'
 
         ## Create individual pointers, required for backprop only. ##
-        self.w1_a, self.w1_b, self.w1_c, self.w1_d = (*self.w1,)
-        self.w2_a, self.w2_b, self.w2_c, self.w2_d = (*self.w2,)
+        # self.w1_a, self.w1_b, self.w1_c, self.w1_d = (*self.w1,)
+        # self.w2_a, self.w2_b, self.w2_c, self.w2_d = (*self.w2,)
 
         self.activation_fn = args.activation_fn
 
@@ -378,10 +382,10 @@ class UnPaddedMLP(torch.nn.Module):
                 sizes: list[tuple[int, int, int]]):
 
         ## First, we call the forward pass simply. ##
-        activ = GroupedGemm(x, self.w1_a, self.w1_b, self.w1_c, self.w1_d, sizes)
+        activ = GroupedGemm(x, self.w1, sizes)
 
         inter_sizes = [(i[0], self.args.hidden_size, self.args.ffn_hidden_size) for i in sizes]
-        second_activs = GroupedGemm(self.activation_fn(activ), self.w2_a, self.w2_b, self.w2_c, self.w2_d, inter_sizes)
+        second_activs = GroupedGemm(self.activation_fn(activ), self.w2, inter_sizes)
         return second_activs
 
 
