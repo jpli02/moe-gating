@@ -335,31 +335,53 @@ class UnPaddedMLP(torch.nn.Module):
         ## We have to restructure the experts. ##
         ## Store them as a list at init time to avoid 
         ## extra per iteration overhead. ##
-        self.w1 = [torch.nn.Parameter(
+        # self.w1 = [torch.nn.Parameter(
+        #     self.args.init_method(torch.empty((
+        #         args.hidden_size,
+        #         args.ffn_hidden_size
+        #     ),
+        #         device=args.device,
+        #         dtype=common.dtype(args),
+        #     )),
+        # ) for _ in range(args.moe_num_packed_experts)]
+
+        self.w1 = torch.nn.Parameter(
             self.args.init_method(torch.empty((
+                args.moe_num_packed_experts,
                 args.hidden_size,
                 args.ffn_hidden_size
             ),
-                device=args.device,
-                dtype=common.dtype(args),
-            )),
-        ) for _ in range(args.moe_num_packed_experts)]
+            device=args.device,
+            dtype=common.dtype(args),
+            ))
+        )
 
-        self.w1 = torch.stack(self.w1)
-        self.w1.retain_grad()
+        #self.w1 = torch.stack(self.w1)
+        #self.w1.retain_grad()
 
-        self.w2 = [torch.nn.Parameter(
+        #self.w2 = [torch.nn.Parameter(
+        #    self.args.output_layer_init_method(torch.empty((
+        #        args.ffn_hidden_size,
+        #        args.hidden_size
+        #    ),
+        #        device=args.device,
+        #        dtype=common.dtype(args),
+        #    )),
+        #) for _ in range(args.moe_num_packed_experts)]
+
+        self.w2 = torch.nn.Parameter(
             self.args.output_layer_init_method(torch.empty((
+                args.moe_num_packed_experts,
                 args.ffn_hidden_size,
                 args.hidden_size
             ),
-                device=args.device,
-                dtype=common.dtype(args),
-            )),
-        ) for _ in range(args.moe_num_packed_experts)]
+            device=args.device,
+            dtype=common.dtype(args),
+            ))
+        )
 
-        self.w2 = torch.stack(self.w2)
-        self.w2.retain_grad()
+        #self.w2 = torch.stack(self.w2)
+        #self.w2.retain_grad()
 
         ## Slightly buggy for now. TODO(ahangupta): debug. ##
         # self.w1 = prepare_weights(self.args.init_method, args, True)
