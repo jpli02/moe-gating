@@ -1,7 +1,8 @@
 # Copyright 2024 Databricks
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any 
+from typing import Any, Union, Callable
+from functools import partial
 import pdb
 
 import stk
@@ -309,6 +310,22 @@ class MemoryOptimizedMLP(torch.autograd.Function):
 
 memory_optimized_mlp = MemoryOptimizedMLP.apply
 
+## Custom function to preapre the weights of a function. ##
+def prepare_weights(init_method: Union[Callable[[torch.Tensor], None], partial[torch.Tensor]], 
+                    args: Arguments, trp: bool = False):
+    weights = torch.nn.Parameter(init_method(
+    torch.empty(
+        (args.moe_num_packed_experts, args.hidden_size, args.ffn_hidden_size)
+        ),
+        device=args.device,
+        dtype=common.dtype(args)))
+
+    if trp:
+        weights = torch.transpose(weights, 1, 2)
+
+    return list(torch.unbind(weights))
+
+
 ## Potentially change to a torch.nn.Module? ##
 class UnPaddedMLP(torch.nn.Module):
 
@@ -320,25 +337,28 @@ class UnPaddedMLP(torch.nn.Module):
         ## We have to restructure the experts. ##
         ## Store them as a list at init time to avoid 
         ## extra per iteration overhead. ##
-        self.w1 = [torch.nn.Parameter(
-            self.args.init_method(torch.empty((
-                args.hidden_size,
-                args.ffn_hidden_size
-            ),
-                device=args.device,
-                dtype=common.dtype(args),
-            )),
-        ) for _ in range(args.moe_num_packed_experts)]
+        # self.w1 = [torch.nn.Parameter(
+        #     self.args.init_method(torch.empty((
+        #         args.hidden_size,
+        #         args.ffn_hidden_size
+        #     ),
+        #         device=args.device,
+        #         dtype=common.dtype(args),
+        #     )),
+        # ) for _ in range(args.moe_num_packed_experts)]
 
-        self.w2 = [torch.nn.Parameter(
-            self.args.output_layer_init_method(torch.empty((
-                args.ffn_hidden_size,
-                args.hidden_size
-            ),
-                device=args.device,
-                dtype=common.dtype(args),
-            )),
-        ) for _ in range(args.moe_num_packed_experts)]
+        # self.w2 = [torch.nn.Parameter(
+        #     self.args.output_layer_init_method(torch.empty((
+        #         args.ffn_hidden_size,
+        #         args.hidden_size
+        #     ),
+        #         device=args.device,
+        #         dtype=common.dtype(args),
+        #     )),
+        # ) for _ in range(args.moe_num_packed_experts)]
+
+        self.w1 = prepare_weights(self.args.init_method, args, True)
+        self.w2 = prepare_weights(self.args.output_layer_init_method, args, False)
 
         print(f'w1 no-padded mlp: {self.w1}')
         print(f'w2 no-padded mlp: {self.w2}')
