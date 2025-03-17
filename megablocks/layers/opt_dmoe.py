@@ -284,6 +284,8 @@ if __name__ == '__main__':
             optMoE = OPTParallelDroplessMLP(args_unpadded)
             sm = torch.nn.Softmax(dim=-1)
             topk_weights, topk_args = torch.topk(sm(torch.randn((batch_size*num_tokens, num_experts), device="cuda" if torch.cuda.is_available() else "cpu")), k=topk)
+
+            comp_fun = torch.compile(optMoE.forward_once)
             
             for _ in range(3):
                 opt_res = optMoE.forward_once(x, topk_weights, topk_args)
@@ -296,14 +298,17 @@ if __name__ == '__main__':
             ## Now we can test memory consumption. ##
             torch.cuda.synchronize()
             start = time.time()
+            torch.cuda.memory._record_memory_history(max_entries=100000, stacks='all')
             start_memory = torch.cuda.memory_allocated()
             torch.cuda.reset_peak_memory_stats()
 
-            for _ in range(10):
+            for _ in range(1):
                 core_out = optMoE.forward_once(x, topk_weights, topk_args)
                 core_out[0].backward(incoming_grads, retain_graph=True)
 
             torch.cuda.synchronize()
+            torch.cuda.memory._dump_snapshot("perf_history")
+            torch.cuda.memory._record_memory_history(enabled=None)
             end = time.time()
             peak_memory = torch.cuda.max_memory_allocated()
             peak_memory_used = peak_memory - start_memory
@@ -352,21 +357,21 @@ if __name__ == '__main__':
         - only works on float16 (though this may be due to improper calling -> need to investigate).
     """
 
+    test_correctness: bool = False 
     ## Try a sample test case on 16-bit precision, easy for debugging. ##
     ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
-    args_padded.init_method = partial(torch.nn.init.constant_, val=0.1)
-    args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
-    args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
-    test_case(1, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
+    if test_correctness:
+        args_padded.init_method = partial(torch.nn.init.constant_, val=0.1)
+        args_padded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
+        args_unpadded.init_method = partial(torch.nn.init.constant_, val=0.1)
+        args_unpadded.output_layer_init_method = partial(torch.nn.init.constant_, val=0.2)
+        test_case(1, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
 
-    test_case(6, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
+        test_case(6, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
 
-    test_case(1, 2048, 4096, 4, 4, torch.float16, args_unpadded, args_padded)
-    test_case(1, 2048, 4096, 8, 4, torch.float16, args_unpadded, args_padded)
-    test_case(1, 2048, 4096, 8, 6, torch.float16, args_unpadded, args_padded)
-    #test_case(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded)
-
+        test_case(1, 2048, 4096, 4, 4, torch.float16, args_unpadded, args_padded)
+        test_case(1, 2048, 4096, 8, 4, torch.float16, args_unpadded, args_padded)
+        test_case(1, 2048, 4096, 8, 6, torch.float16, args_unpadded, args_padded)
 
     ## More aggressive test cases with random init from normal distribution. ##
     ## However cannot get megablocks and custom mlp weights to sync up... Investigate when there's more time TODO(ahangupta). ##
@@ -379,13 +384,15 @@ if __name__ == '__main__':
 
     ## True benchmark here. ##
     mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
 
 
     
