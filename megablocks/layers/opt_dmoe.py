@@ -372,6 +372,7 @@ if __name__ == '__main__':
 
     ## True benchmark here. ##
     mem_consump(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(6, 11024, 4096, 4, torch.float16, args_unpadded, args_padded, custom=False)
 
 
     
