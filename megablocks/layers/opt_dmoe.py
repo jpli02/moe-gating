@@ -243,13 +243,14 @@ if __name__ == '__main__':
         print(f'max diff inps, bwd: {torch.abs(x.grad - x_torch.grad).max().item()}')
 
         ## Correctness checks for weight grads. ##
-        opt_w1_grads = 0
-        opt_w2_grads = 0
-        for w1 in optMoE.mlp.w1:
-            opt_w1_grads += w1.grad.double().sum()
+        opt_w1_grads = optMoE.mlp.w1.grad.double().sum()
+        opt_w2_grads = optMoE.mlp.w2.grad.double().sum()
+        ## Temp unocmment, remove once debugging finished TODO(ahangupta).
+        # for w1 in optMoE.mlp.w1:
+        #     opt_w1_grads += w1.grad.double().sum()
 
-        for w2 in optMoE.mlp.w2:
-            opt_w2_grads += w2.grad.double().sum()
+        # for w2 in optMoE.mlp.w2:
+        #     opt_w2_grads += w2.grad.double().sum()
 
         nonopt_w1_grads = paddedMoE.mlp.w1.grad.double().sum()
 
