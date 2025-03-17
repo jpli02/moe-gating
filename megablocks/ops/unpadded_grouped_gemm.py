@@ -35,7 +35,8 @@ class GroupedGemm(torch.autograd.Function):
             torch.matmul(torch.transpose(a, 0, 1), b) for a, b in zip(sliced_xs, sliced_grads)
         ]
 
-        dw = torch.cat(dw, dim=0)
+        #dw = torch.cat(dw, dim=0)
+        dw = torch.stack(dw)
 
 
         return dx, dw, None

@@ -345,7 +345,8 @@ class UnPaddedMLP(torch.nn.Module):
             )),
         ) for _ in range(args.moe_num_packed_experts)]
 
-        self.w1 = torch.cat(self.w1, dim=0)
+        self.w1 = torch.stack(self.w1)
+        self.w1.retain_grad()
 
         self.w2 = [torch.nn.Parameter(
             self.args.output_layer_init_method(torch.empty((
@@ -357,7 +358,8 @@ class UnPaddedMLP(torch.nn.Module):
             )),
         ) for _ in range(args.moe_num_packed_experts)]
 
-        self.w2 = torch.cat(self.w2, dim=0)
+        self.w2 = torch.stack(self.w2)
+        self.w2.retain_grad()
 
         ## Slightly buggy for now. TODO(ahangupta): debug. ##
         # self.w1 = prepare_weights(self.args.init_method, args, True)
