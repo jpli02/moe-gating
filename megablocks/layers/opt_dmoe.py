@@ -263,6 +263,23 @@ if __name__ == '__main__':
         
         print(f'max diff, fwd: {torch.abs(opt_res[0] - ground_truth[0]).max().item()}')
         print(f'max diff inps, bwd: {torch.abs(x.grad - x_torch.grad).max().item()}')
+
+        ## Correctness checks for weight grads. ##
+        opt_w1_grads = 0
+        opt_w2_grads = 0
+        for w1 in optMoE.mlp.w1:
+            opt_w1_grads += w1.grad.sum()
+
+        for w2 in optMoE.mlp.w2:
+            opt_w2_grads += w2.grad.sum()
+
+        nonopt_w1_grads = paddedMoE.mlp.w1.grad.sum()
+
+        nonopt_w2_grads = paddedMoE.mlp.w2.grad.sum()
+
+        print(f'avg diff w1 grads: {torch.abs(opt_w1_grads - nonopt_w1_grads)/(args_padded.ffn_hidden_size * args_padded.hidden_size)}')
+        print(f'avg diff w2 grads: {torch.abs(opt_w2_grads - nonopt_w2_grads)/(args_padded.ffn_hidden_size * args_padded.hidden_size)}')
+
     """
     Certain constraints on megablocks:
         - m and n and k need to be multiples of 128.
