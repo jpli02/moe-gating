@@ -313,7 +313,7 @@ if __name__ == '__main__':
             peak_memory = torch.cuda.max_memory_allocated()
             peak_memory_used = peak_memory - start_memory
 
-            print(f'opt fwd+bwd, num_tokens: {num_tokens}, topk: {topk}, num_experts: {num_experts}, peak memory: {peak_memory_used / 1024 ** 2:.2f} MB, time: {(end-start)/10:.2f}')
+            print(f'opt fwd+bwd, num_tokens: {num_tokens}, topk: {topk}, num_experts: {num_experts}, peak memory: {peak_memory / 1024 ** 2:.2f} MB, time: {(end-start)/10:.2f}')
         else:
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(0)
@@ -349,7 +349,7 @@ if __name__ == '__main__':
             peak_memory = torch.cuda.max_memory_allocated()
             peak_memory_used = peak_memory - start_memory
 
-            print(f'padded fwd+bwd, num_tokens: {num_tokens}, topk: {topk}, num_experts: {num_experts}, peak memory: {peak_memory_used / 1024 ** 2:.2f} MB, time: {(end-start)/10:.2f}')
+            print(f'padded fwd+bwd, num_tokens: {num_tokens}, topk: {topk}, num_experts: {num_experts}, peak memory: {peak_memory / 1024 ** 2:.2f} MB, time: {(end-start)/10:.2f}')
 
     """
     Certain constraints on megablocks:
@@ -384,15 +384,15 @@ if __name__ == '__main__':
 
     ## True benchmark here. ##
     mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
 
 
     
