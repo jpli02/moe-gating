@@ -357,7 +357,7 @@ if __name__ == '__main__':
         - only works on float16 (though this may be due to improper calling -> need to investigate).
     """
 
-    test_correctness: bool = False 
+    test_correctness: bool = True
     ## Try a sample test case on 16-bit precision, easy for debugging. ##
     ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
     if test_correctness:
@@ -373,26 +373,27 @@ if __name__ == '__main__':
         test_case(1, 2048, 4096, 8, 4, torch.float16, args_unpadded, args_padded)
         test_case(1, 2048, 4096, 8, 6, torch.float16, args_unpadded, args_padded)
 
-    ## More aggressive test cases with random init from normal distribution. ##
-    ## However cannot get megablocks and custom mlp weights to sync up... Investigate when there's more time TODO(ahangupta). ##
-    # args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    # args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    # args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    # args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-    # test_case(1, 128, 128, 4, torch.float16, args_unpadded, args_padded)
+        ## More aggressive test cases with random init from normal distribution. ##
+        ## However cannot get megablocks and custom mlp weights to sync up... Investigate when there's more time TODO(ahangupta). ##
+        args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+
+        test_case(1, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
 
 
     ## True benchmark here. ##
-    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
 
 
     

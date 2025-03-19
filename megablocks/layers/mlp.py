@@ -429,7 +429,9 @@ class SparseMLP(torch.nn.Module):
             device=args.device,
             dtype=common.dtype(args),
             ))
-        )
+        ).view([args.hidden_size, -1])
+
+        self.w1.retain_grad()
 
         self.w2 = torch.nn.Parameter(
             self.args.output_layer_init_method(torch.empty((
@@ -440,8 +442,9 @@ class SparseMLP(torch.nn.Module):
             device=args.device,
             dtype=common.dtype(args),
             ))
-        )
+        ).view([-1, args.hidden_size])
 
+        self.w2.retain_grad()
 
         # self.w1 = torch.nn.Parameter(
         #     torch.empty(
@@ -506,7 +509,7 @@ class SparseMLP(torch.nn.Module):
         #     self._should_set_parallelism_attribute,
         # )
 
-        # self.gradient_scale = None
+        self.gradient_scale = None
         # if self.args.moe_expert_model_parallelism:
         #     self.gradient_scale = 1 / mpu.get_expert_parallel_world_size(self.args,)
 
@@ -528,7 +531,7 @@ class SparseMLP(torch.nn.Module):
             )
 
         # Compute the MLP.
-        x = stk.ops.sdd(x, w1.t(), topo)
+        x = stk.ops.sdd(x, w1, topo)
         activation_fn_out = act_fn(x, self.args.activation_fn)
         return stk.ops.dsd(activation_fn_out, w2)
 
