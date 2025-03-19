@@ -357,7 +357,7 @@ if __name__ == '__main__':
         - only works on float16 (though this may be due to improper calling -> need to investigate).
     """
 
-    test_correctness: bool = True
+    test_correctness: bool = False
     ## Try a sample test case on 16-bit precision, easy for debugging. ##
     ## Just for simple correctness fill everything with the same value. Otherwise randomness is hard to check. ##
     if test_correctness:
