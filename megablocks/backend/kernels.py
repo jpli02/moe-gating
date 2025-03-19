@@ -31,16 +31,16 @@ def assert_equal(a, b):
 # weights: (tokens * top_k), real.
 # bins: (num_experts), integer.
 # padded_bins: (num_experts), integer.
-@triton.autotune(
-    configs=[
-        triton.Config({'BLOCK_X': 64}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=2),
-        triton.Config({'BLOCK_X': 256}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=4),
-        triton.Config({'BLOCK_X': 256}, num_warps=4),
-    ],
-    key=['NUM_COLUMNS'],
-)
+# @triton.autotune(
+#     configs=[
+#         triton.Config({'BLOCK_X': 64}, num_warps=2),
+#         triton.Config({'BLOCK_X': 128}, num_warps=2),
+#         triton.Config({'BLOCK_X': 256}, num_warps=2),
+#         triton.Config({'BLOCK_X': 128}, num_warps=4),
+#         triton.Config({'BLOCK_X': 256}, num_warps=4),
+#     ],
+#     key=['NUM_COLUMNS'],
+# )
 @triton.jit
 def _padded_copy(
     a,
@@ -134,6 +134,8 @@ def padded_gather(x, indices, bin_ids, weights, bins, padded_bins, top_k):
         A_TO_B=True,
         TOP_K=top_k,
         SCALE=weights is not None,
+        BLOCK_X=256,
+        num_warps=2,
     )
     return out
 
@@ -166,6 +168,8 @@ def gather(x, indices, bin_ids, weights, bins, top_k):
         A_TO_B=True,
         TOP_K=top_k,
         SCALE=weights is not None,
+        BLOCK_X=256,
+        num_warps=2,
     )
     return out
 
@@ -197,6 +201,8 @@ def padded_scatter(x, indices, bin_ids, weights, bins, padded_bins, top_k):
         A_TO_B=False,
         TOP_K=top_k,
         SCALE=weights is not None,
+        BLOCK_X=256,
+        num_warps=2,
     )
 
     # Reduce along the top-k dimension, if needed.
@@ -561,48 +567,48 @@ def num_sms():
     return 148
 
 ## Code taken from: https://triton-lang.org/main/getting-started/tutorials/08-grouped-gemm.html#sphx-glr-getting-started-tutorials-08-grouped-gemm-py. ##
-@triton.autotune(
-    configs=[
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 32,
-            'NUM_SM': 84,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 32,
-            'NUM_SM': 128,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 64,
-            'BLOCK_SIZE_K': 32,
-            'NUM_SM': 84,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 64,
-            'BLOCK_SIZE_K': 32,
-            'NUM_SM': 128,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 64,
-            'NUM_SM': num_sms(),
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 64,
-            'NUM_SM': num_sms(),
-        }),
-    ],
-    key=['group_size'],
-)
-@triton.jit
+# @triton.autotune(
+#     configs=[
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 32,
+#             'NUM_SM': 84,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 32,
+#             'NUM_SM': 128,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 64,
+#             'BLOCK_SIZE_K': 32,
+#             'NUM_SM': 84,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 64,
+#             'BLOCK_SIZE_K': 32,
+#             'NUM_SM': 128,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 64,
+#             'NUM_SM': num_sms(),
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 64,
+#             'NUM_SM': num_sms(),
+#         }),
+#     ],
+#     key=['group_size'],
+# )
+# @triton.jit
 def grouped_matmul_kernel(
     # device tensor of matrices pointers
     group_a_ptrs,
@@ -728,7 +734,8 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     d_g_sizes = torch.tensor(g_sizes, dtype=torch.int32, device=DEVICE)
     d_g_lds = torch.tensor(g_lds, dtype=torch.int32, device=DEVICE)
     # we use a fixed number of CTA, and it's auto-tunable
-    grid = lambda META: (META['NUM_SM'], )
+    #grid = lambda META: (META['NUM_SM'], )
+    grid = (128,)
     grouped_matmul_kernel[grid](
         d_a_ptrs,
         d_b_ptrs,
@@ -736,7 +743,11 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         d_g_sizes,
         d_g_lds,
         group_size,
-        activation="float16" if group_A[0].dtype == torch.float16  else "float32"
+        activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+        BLOCK_SIZE_M=64,
+        BLOCK_SIZE_N=64,
+        BLOCK_SIZE_K=32,
+        num_warps=4,
     )
 
     return group_C
