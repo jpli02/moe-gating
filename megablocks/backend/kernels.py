@@ -608,7 +608,7 @@ def num_sms():
 #     ],
 #     key=['group_size'],
 # )
-# @triton.jit
+@triton.jit
 def grouped_matmul_kernel(
     # device tensor of matrices pointers
     group_a_ptrs,
@@ -748,6 +748,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         BLOCK_SIZE_N=64,
         BLOCK_SIZE_K=32,
         num_warps=4,
+        NUM_SM=128,
     )
 
     return group_C

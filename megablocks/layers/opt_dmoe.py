@@ -389,16 +389,16 @@ if __name__ == '__main__':
 
 
     ## True benchmark here. ##
-    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
-    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
-    # mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 1, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 2, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 4, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 6, 2048, torch.float16, args_unpadded, args_padded, custom=False)
+    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=True)
+    mem_consump(1, 4096, 7168, 8, 8, 2048, torch.float16, args_unpadded, args_padded, custom=False)
 
 
     
