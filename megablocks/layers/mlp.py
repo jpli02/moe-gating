@@ -421,49 +421,72 @@ class SparseMLP(torch.nn.Module):
         self._num_rows_per_rank = mpu.experts_per_rank(args) * mpu.features_per_rank(args)
 
         self.w1 = torch.nn.Parameter(
-            torch.empty(
-                self._num_rows_per_rank,
+            self.args.init_method(torch.empty((
+                args.moe_num_packed_experts,
                 args.hidden_size,
-                device=args.device,
-                dtype=common.dtype(args),
+                args.ffn_hidden_size
             ),
-        )
-        self.w2 = torch.nn.Parameter(
-            torch.empty(
-                self._num_rows_per_rank,
-                args.hidden_size,
-                device=args.device,
-                dtype=common.dtype(args),
-            ),
+            device=args.device,
+            dtype=common.dtype(args),
+            ))
         )
 
-        # Initialize the parameters for the MLP.
-        #
-        # NOTE: It is important that we create the weight tensors prior
-        # to creating the master weights and slicing our the piece for
-        # this rank. If the master weights are created first the PyTorch
-        # caching allocator appears to use the same memory block for these
-        # and the slice which causes large increases in our peak memory
-        # usage.
-        with torch.no_grad():
-            self.w1.copy_(
-                create_dmoe_expert_weights(
-                    args,
-                    args.moe_num_experts,
-                    args.ffn_hidden_size,
-                    args.hidden_size,
-                    args.init_method,
-                ),
-            )
-            self.w2.copy_(
-                create_dmoe_expert_weights(
-                    args,
-                    args.moe_num_experts,
-                    args.ffn_hidden_size,
-                    args.hidden_size,
-                    args.output_layer_init_method,
-                ),
-            )
+        self.w2 = torch.nn.Parameter(
+            self.args.output_layer_init_method(torch.empty((
+                args.moe_num_packed_experts,
+                args.ffn_hidden_size,
+                args.hidden_size
+            ),
+            device=args.device,
+            dtype=common.dtype(args),
+            ))
+        )
+
+
+        # self.w1 = torch.nn.Parameter(
+        #     torch.empty(
+        #         self._num_rows_per_rank,
+        #         args.hidden_size,
+        #         device=args.device,
+        #         dtype=common.dtype(args),
+        #     ),
+        # )
+        # self.w2 = torch.nn.Parameter(
+        #     torch.empty(
+        #         self._num_rows_per_rank,
+        #         args.hidden_size,
+        #         device=args.device,
+        #         dtype=common.dtype(args),
+        #     ),
+        # )
+
+        # # Initialize the parameters for the MLP.
+        # #
+        # # NOTE: It is important that we create the weight tensors prior
+        # # to creating the master weights and slicing our the piece for
+        # # this rank. If the master weights are created first the PyTorch
+        # # caching allocator appears to use the same memory block for these
+        # # and the slice which causes large increases in our peak memory
+        # # usage.
+        # with torch.no_grad():
+        #     self.w1.copy_(
+        #         create_dmoe_expert_weights(
+        #             args,
+        #             args.moe_num_experts,
+        #             args.ffn_hidden_size,
+        #             args.hidden_size,
+        #             args.init_method,
+        #         ),
+        #     )
+        #     self.w2.copy_(
+        #         create_dmoe_expert_weights(
+        #             args,
+        #             args.moe_num_experts,
+        #             args.ffn_hidden_size,
+        #             args.hidden_size,
+        #             args.output_layer_init_method,
+        #         ),
+        #     )
 
         # print(f'w1 weights sparse-mlp: {self.w1}')
 
@@ -473,19 +496,19 @@ class SparseMLP(torch.nn.Module):
 
         # print(f'w2 sparse-mlp sum: {self.w2.sum()}')
 
-        self._should_set_parallelism_attribute = args.moe_expert_model_parallelism
-        mpu.set_expert_model_parallel_attributes(
-            self.w1,
-            self._should_set_parallelism_attribute,
-        )
-        mpu.set_expert_model_parallel_attributes(
-            self.w2,
-            self._should_set_parallelism_attribute,
-        )
+        # self._should_set_parallelism_attribute = args.moe_expert_model_parallelism
+        # mpu.set_expert_model_parallel_attributes(
+        #     self.w1,
+        #     self._should_set_parallelism_attribute,
+        # )
+        # mpu.set_expert_model_parallel_attributes(
+        #     self.w2,
+        #     self._should_set_parallelism_attribute,
+        # )
 
-        self.gradient_scale = None
-        if self.args.moe_expert_model_parallelism:
-            self.gradient_scale = 1 / mpu.get_expert_parallel_world_size(self.args,)
+        # self.gradient_scale = None
+        # if self.args.moe_expert_model_parallelism:
+        #     self.gradient_scale = 1 / mpu.get_expert_parallel_world_size(self.args,)
 
     def scale_grad(self, w):
         if self.gradient_scale is None:
