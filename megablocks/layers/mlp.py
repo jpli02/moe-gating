@@ -404,7 +404,6 @@ class UnPaddedMLP(torch.nn.Module):
 
     def forward(self, x: torch.Tensor, 
                 sizes: list[tuple[int, int, int]]):
-
         ## First, we call the forward pass simply. ##
         activ = GroupedGemm(x, self.w1, sizes)
 
@@ -420,7 +419,7 @@ class SparseMLP(torch.nn.Module):
         self.args = args
         self._num_rows_per_rank = mpu.experts_per_rank(args) * mpu.features_per_rank(args)
 
-        self.w1 = torch.nn.Parameter(
+        t = torch.nn.Parameter(
             self.args.init_method(torch.empty((
                 args.moe_num_packed_experts,
                 args.hidden_size,
@@ -429,7 +428,9 @@ class SparseMLP(torch.nn.Module):
             device=args.device,
             dtype=common.dtype(args),
             ))
-        ).view([args.hidden_size, -1])
+        )
+
+        self.w1 = torch.transpose(t, 0, 1).reshape([args.hidden_size, -1])
 
         self.w1.retain_grad()
 

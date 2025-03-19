@@ -369,18 +369,23 @@ if __name__ == '__main__':
 
         test_case(6, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
 
+        test_case(1, 512, 128, 4, 4, torch.float16, args_unpadded, args_padded)
+
+        test_case(1, 1024, 128, 4, 4, torch.float16, args_unpadded, args_padded)
+
+
         test_case(1, 2048, 4096, 4, 4, torch.float16, args_unpadded, args_padded)
         test_case(1, 2048, 4096, 8, 4, torch.float16, args_unpadded, args_padded)
         test_case(1, 2048, 4096, 8, 6, torch.float16, args_unpadded, args_padded)
 
         ## More aggressive test cases with random init from normal distribution. ##
         ## However cannot get megablocks and custom mlp weights to sync up... Investigate when there's more time TODO(ahangupta). ##
-        args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-        args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-        args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
-        args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        # args_padded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        # args_padded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        # args_unpadded.init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
+        # args_unpadded.output_layer_init_method = partial(torch.nn.init.normal_, mean=0.0, std=0.02)
 
-        test_case(1, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
+        # test_case(1, 128, 128, 4, 4, torch.float16, args_unpadded, args_padded)
 
 
     ## True benchmark here. ##
