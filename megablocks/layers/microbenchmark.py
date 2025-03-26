@@ -21,14 +21,14 @@ def test_grouped_gemm(
     mlp = dmlp_registry.get(args)
     grads = torch.randn_like(inp)
     for _ in range(10):
-        a = mlp(inp)
+        a = mlp(inp, [(num_tokens//num_experts, ffn_hidden_size, hidden_dim) for _ in range(num_experts)])
         a.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     st = time.time()
 
     for _ in range(10):
-        b = mlp(inp)
+        b = mlp(inp, [(num_tokens//num_experts, ffn_hidden_size, hidden_dim) for _ in range(num_experts)])
         b.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
@@ -55,25 +55,25 @@ def test_sequential_gemm(
         for t, e in zip(inter_result, experts_l_two):
             final_result.append(torch.matmul(t, e))
 
-        return torch.stack(final_result)
+        return torch.cat(final_result, dim=0)
 
     ## First create the requsite tensor.
-    grads = torch.randn((num_tokens, hidden_dim), dtype=dtype, device="gpu" if torch.cuda.is_available() else "cpu")
-    token_inps = [torch.randn((num_tokens//num_experts, hidden_dim), dtype=dtype, device="gpu" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
-    l_one_experts = [torch.randn((hidden_dim, ffn_hidden_size), dtype=dtype, device="gpu" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
-    l_two_experts = [torch.randn((ffn_hidden_size, hidden_dim), dtype=dtype, device="gpu" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
+    grads = torch.randn((num_tokens, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu")
+    token_inps = [torch.randn((num_tokens//num_experts, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
+    l_one_experts = [torch.randn((hidden_dim, ffn_hidden_size), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
+    l_two_experts = [torch.randn((ffn_hidden_size, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
     activ_func = torch.nn.GELU(approximate="tanh")
 
     for _ in range(5):
         a = internal_gemm(token_inps, l_one_experts, l_two_experts, activ_func)
-        a.backward(grads, retain_grad=True)
+        a.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     st=time.time()
 
     for _ in range(10):
         b = internal_gemm(token_inps, l_one_experts, l_two_experts, activ_func)
-        b.backward(grads, retain_grad=True)
+        b.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     ed=time.time()
@@ -83,12 +83,14 @@ def test_sequential_gemm(
 
 if __name__ == '__main__':
     token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
-    inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
+    #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
+    inner_dimensions = [(7168, 2048)]
     args = Arguments()
+    num_experts = 16
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_grouped_gemm(tc, hid_dim, 4, 8, ffn_dim, torch.float16, args)
+            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args)
 
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_sequential_gemm(tc, hid_dim, 4, 8, ffn_dim, torch.float16, args)
+            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args)
