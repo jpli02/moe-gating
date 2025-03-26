@@ -82,4 +82,13 @@ def test_sequential_gemm(
 
 
 if __name__ == '__main__':
-    pass
+    token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
+    inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
+    args = Arguments()
+    for tc in token_cnt:
+        for hid_dim, ffn_dim in inner_dimensions:
+            test_grouped_gemm(tc, hid_dim, 4, 8, ffn_dim, torch.float16, args)
+
+    for tc in token_cnt:
+        for hid_dim, ffn_dim in inner_dimensions:
+            test_sequential_gemm(tc, hid_dim, 4, 8, ffn_dim, torch.float16, args)
