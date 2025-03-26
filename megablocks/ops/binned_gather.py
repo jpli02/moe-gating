@@ -3,7 +3,7 @@
 from typing import Any
 
 import torch
-from stk.backend.autocast import custom_bwd, custom_fwd
+#from stk.backend.autocast import custom_bwd, custom_fwd
 
 from megablocks.backend import kernels
 
