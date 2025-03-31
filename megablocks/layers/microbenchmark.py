@@ -2,13 +2,15 @@ import torch
 from .arguments import Arguments
 from . import dmlp_registry
 import time
-from functools import partial
+from functools import partial, reduce
 
 def test_grouped_gemm(
         num_tokens: int, hidden_dim: int,
         num_experts: int, topk: int, ffn_hidden_size: int,
-        dtype: torch.dtype, args: Arguments
+        dtype: torch.dtype, args: Arguments, token_dist : list[int]  ## Token_dist gives a list of ints representing the token count per expert.
         ):
+    assert len(token_dist) == num_experts, 'incorrect token_dist length'
+    assert reduce(lambda a, b: a+b, token_dist) == num_tokens, 'incorrect token_dist composition'
     args.hidden_size = hidden_dim
     args.moe_num_packed_experts = num_experts
     args.moe_num_experts = num_experts
@@ -21,14 +23,14 @@ def test_grouped_gemm(
     mlp = dmlp_registry.get(args)
     grads = torch.randn_like(inp)
     for _ in range(10):
-        a = mlp(inp, [(num_tokens//num_experts, ffn_hidden_size, hidden_dim) for _ in range(num_experts)])
+        a = mlp(inp, [(cnt, ffn_hidden_size, hidden_dim) for cnt in token_dist])
         a.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     st = time.time()
 
     for _ in range(10):
-        b = mlp(inp, [(num_tokens//num_experts, ffn_hidden_size, hidden_dim) for _ in range(num_experts)])
+        b = mlp(inp, [(cnt, ffn_hidden_size, hidden_dim) for cnt in token_dist])
         b.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
@@ -40,9 +42,10 @@ def test_grouped_gemm(
 def test_sequential_gemm(
         num_tokens: int, hidden_dim: int,
         num_experts: int, topk: int, ffn_hidden_size: int,
-        dtype: torch.dtype, args: Arguments
+        dtype: torch.dtype, args: Arguments, token_dist: list[int]  ## Token distribution
         ):
-
+    assert len(token_dist) == num_experts, 'incorrect token_dist size.'
+    assert reduce(lambda a,b: a+b, token_dist) == num_tokens, 'incorrect token_dist composition.'
     assert num_tokens % num_experts == 0, 'Incorrect token count.'
     ## Loops over to compute the Gemm Sequentially.
     def internal_gemm(tokens: list[torch.Tensor], experts_l_one: list[torch.Tensor], experts_l_two: list[torch.Tensor], activation_func: torch.nn.Module):
@@ -59,7 +62,7 @@ def test_sequential_gemm(
 
     ## First create the requsite tensor.
     grads = torch.randn((num_tokens, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu")
-    token_inps = [torch.randn((num_tokens//num_experts, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
+    token_inps = [torch.randn((cnt, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for cnt in token_dist]
     l_one_experts = [torch.randn((hidden_dim, ffn_hidden_size), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
     l_two_experts = [torch.randn((ffn_hidden_size, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
     activ_func = torch.nn.GELU(approximate="tanh")
@@ -80,6 +83,16 @@ def test_sequential_gemm(
 
     print(f'sequential-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts} time: {(ed-st)/10}')
 
+def two_two_split(ratio : float, num_tokens : int, num_experts : int):
+    assert num_experts == 4, 'Incorrect expert count'
+    first = [round((ratio/(2*ratio+2))*num_tokens) for _ in range(num_experts // 2)]
+    second = [round((1/(2*ratio+2))*num_tokens) for _ in range(num_experts // 2)]
+
+    assert reduce(lambda a,b:a+b, first+second) == num_tokens, 'incorrect token count'
+    return first + second
+
+def even_split(num_tokens: int, num_experts: int):
+    return [num_tokens//num_experts for _ in range(num_experts)]
 
 if __name__ == '__main__':
     token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
@@ -89,8 +102,8 @@ if __name__ == '__main__':
     num_experts = 4
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args)
+            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(1, tc, 4))
 
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args)
+            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(1, tc, 4))
