@@ -34,7 +34,7 @@ def test_grouped_gemm(
     torch.cuda.synchronize()
     ed = time.time()
 
-    print(f'grouped-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, time: {(ed-st)/10}')
+    print(f'grouped-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts}, time: {(ed-st)/10}')
 
 
 def test_sequential_gemm(
@@ -78,7 +78,7 @@ def test_sequential_gemm(
     torch.cuda.synchronize()
     ed=time.time()
 
-    print(f'sequential-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, time: {(ed-st)/10}')
+    print(f'sequential-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts} time: {(ed-st)/10}')
 
 
 if __name__ == '__main__':
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
     inner_dimensions = [(7168, 2048)]
     args = Arguments()
-    num_experts = 16
+    num_experts = 4
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
             test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args)
