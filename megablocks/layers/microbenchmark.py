@@ -95,6 +95,19 @@ def two_two_split(ratio : float, num_tokens : int, num_experts : int):
 def even_split(num_tokens: int, num_experts: int):
     return [num_tokens//num_experts for _ in range(num_experts)]
 
+def irregular_split(num_tokens: int, num_experts: int):
+    import random
+    ## Seed for reproducibility. ##
+    random.seed(0)
+    assert num_tokens % num_experts == 0, 'incorrect token and/or expert count.'
+    ## we generate random numbers between [0, num_tokens//num_experts].
+
+    token_dist = [round(random.random() * (num_tokens//num_experts)) for _ in range(num_experts - 1)]
+
+    total_token_cnt = reduce(lambda a,b: a+b, token_dist)
+    assert total_token_cnt > 0, 'incorrect distribution generated.'
+    return token_dist + [num_tokens - total_token_cnt]
+
 if __name__ == '__main__':
     token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
@@ -106,8 +119,10 @@ if __name__ == '__main__':
     ratio = 64
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            #test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
 
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            #test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
