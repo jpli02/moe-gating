@@ -36,7 +36,7 @@ def test_grouped_gemm(
     torch.cuda.synchronize()
     ed = time.time()
 
-    print(f'grouped-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts}, time: {(ed-st)/10}')
+    print(f'grouped-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts}, token_dist: {token_dist} time: {(ed-st)/10}')
 
 
 def test_sequential_gemm(
@@ -81,7 +81,7 @@ def test_sequential_gemm(
     torch.cuda.synchronize()
     ed=time.time()
 
-    print(f'sequential-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts} time: {(ed-st)/10}')
+    print(f'sequential-gemm tokens: {num_tokens}, hidden_dim: {hidden_dim}, ffn_dim: {ffn_hidden_size}, experts: {num_experts} token_dist: {token_dist} time: {(ed-st)/10}')
 
 def two_two_split(ratio : float, num_tokens : int, num_experts : int):
     assert num_experts == 4, 'Incorrect expert count'
@@ -98,12 +98,14 @@ if __name__ == '__main__':
     token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
     inner_dimensions = [(7168, 2048)]
+    #inner_dimensions = [(2048, 1408)]
+    #inner_dimensions = [(5120, 1536)]
     args = Arguments()
     num_experts = 4
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(1, tc, 4))
+            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(64, tc, 4))
 
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(1, tc, 4))
+            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(64, tc, 4))
