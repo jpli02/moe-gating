@@ -729,7 +729,9 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     d_g_lds = torch.tensor(g_lds, dtype=torch.int32, device=DEVICE)
     # we use a fixed number of CTA, and it's auto-tunable
     #grid = lambda META: (META['NUM_SM'], )
-    grid = (128,)
+    #NUM_SM = 2048
+    NUM_SM = 4096
+    grid = (NUM_SM,)
     grouped_matmul_kernel[grid](
         d_a_ptrs,
         d_b_ptrs,
@@ -742,7 +744,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         BLOCK_SIZE_N=64,
         BLOCK_SIZE_K=32,
         num_warps=4,
-        NUM_SM=128,
+        NUM_SM=NUM_SM,
     )
 
     return group_C
