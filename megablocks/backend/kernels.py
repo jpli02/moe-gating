@@ -627,7 +627,7 @@ def grouped_matmul_kernel(
 ):
     tile_idx = tl.program_id(0)
     last_problem_end = 0
-    for g in range(group_size):
+    for g in tl.range(group_size):
         # get the gemm size of the current problem
         gm = tl.load(group_gemm_sizes + g * 3)
         gn = tl.load(group_gemm_sizes + g * 3 + 1)
@@ -662,7 +662,8 @@ def grouped_matmul_kernel(
             a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
             b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
             accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-            for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
+            #for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
+            for kk in tl.range(0, tl.cdiv(k, BLOCK_SIZE_K)):
                 # hint to Triton compiler to do proper loop pipelining
                 # tl.multiple_of(a_ptrs, [16, 16])
                 # tl.multiple_of(b_ptrs, [16, 16])

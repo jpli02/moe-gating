@@ -112,17 +112,17 @@ if __name__ == '__main__':
     token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
     #inner_dimensions = [(7168, 2048)]
-    inner_dimensions = [(2048, 1408)]
-    #inner_dimensions = [(5120, 1536)]
+    inner_dimensions = [(5120, 1536)]
+    #inner_dimensions = [(2048, 1408)]
     args = Arguments()
-    num_experts = 64
+    num_experts = 32
     ratio = 64
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            #test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
-            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
+            test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            #test_grouped_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
 
     for tc in token_cnt:
         for hid_dim, ffn_dim in inner_dimensions:
-            #test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
-            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
+            test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, two_two_split(ratio, tc, num_experts))
+            #test_sequential_gemm(tc, hid_dim, num_experts, 8, ffn_dim, torch.float16, args, irregular_split(tc, num_experts))
