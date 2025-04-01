@@ -696,41 +696,41 @@ def grouped_matmul_kernel(
         last_problem_end = last_problem_end + num_tiles
 
 
-@triton.autotune(
-    configs=[
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 32,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 32,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 64,
-            'BLOCK_SIZE_K': 32,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 64,
-            'BLOCK_SIZE_K': 32,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 128,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 64,
-        }),
-        triton.Config({
-            'BLOCK_SIZE_M': 64,
-            'BLOCK_SIZE_N': 128,
-            'BLOCK_SIZE_K': 64,
-        }),
-    ],
-    key=['group_size'],
-)
+# @triton.autotune(
+#     configs=[
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 32,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 32,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 64,
+#             'BLOCK_SIZE_K': 32,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 64,
+#             'BLOCK_SIZE_K': 32,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 128,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 64,
+#         }),
+#         triton.Config({
+#             'BLOCK_SIZE_M': 64,
+#             'BLOCK_SIZE_N': 128,
+#             'BLOCK_SIZE_K': 64,
+#         }),
+#     ],
+#     key=['group_size'],
+# )
 @triton.jit
 def grouped_matmul_kernel_opt(
     # device tensor of matrices pointers
@@ -756,7 +756,6 @@ def grouped_matmul_kernel_opt(
 ):
     tile_idx = tl.program_id(0)
     g = tl.program_id(1)
-    last_problem_end = 0
     # get the gemm size of the current problem
     gm = tl.load(group_gemm_sizes + g * 3)
     gn = tl.load(group_gemm_sizes + g * 3 + 1)
@@ -764,65 +763,71 @@ def grouped_matmul_kernel_opt(
     num_m_tiles = tl.cdiv(gm, BLOCK_SIZE_M)
     num_n_tiles = tl.cdiv(gn, BLOCK_SIZE_N)
     num_tiles = num_m_tiles * num_n_tiles
-    # iterate through the tiles in the current gemm problem
-    while (tile_idx >= last_problem_end and tile_idx < last_problem_end + num_tiles):
-        # pick up a tile from the current gemm problem
-        k = gk
-        lda = tl.load(g_lds + g * 3)
-        ldb = tl.load(g_lds + g * 3 + 1)
-        ldc = tl.load(g_lds + g * 3 + 2)
-        if activation == 'float16':
-            a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
-            b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
-            c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
-        else:
-            a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
-            b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
-            c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
-        # figure out tile coordinates
-        tile_idx_in_gemm = tile_idx - last_problem_end
-        tile_m_idx = tile_idx_in_gemm // num_n_tiles
-        tile_n_idx = tile_idx_in_gemm % num_n_tiles
+    k = gk
+    ## Extract the iteration counts. ##
+    num_iters = tl.cdiv(num_tiles-tile_idx, NUM_SM)
+    k_tile_cnt = tl.cdiv(k, BLOCK_SIZE_K)
 
-        # do regular gemm here
-        offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-        offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-        offs_am = tl.max_contiguous(offs_am, BLOCK_SIZE_M)
-        offs_bn = tl.max_contiguous(offs_bn, BLOCK_SIZE_N)
-        offs_k = tl.arange(0, BLOCK_SIZE_K)
-        a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
-        b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
-        accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-        #for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
-        for kk in tl.range(0, tl.cdiv(k, BLOCK_SIZE_K)):
-            # hint to Triton compiler to do proper loop pipelining
-            # tl.multiple_of(a_ptrs, [16, 16])
-            # tl.multiple_of(b_ptrs, [16, 16])
-            # assume full tile for now
-            a = tl.load(a_ptrs, mask= \
-                        ## Question, what on earth goes in here? ##
-                        (offs_am[:, None] < gm)  \
-                        & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
-            b = tl.load(b_ptrs, mask = \
-                        (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
-                        & (offs_bn[None, :] < gn))
-            accumulator += tl.dot(a, b)
-            a_ptrs += BLOCK_SIZE_K
-            b_ptrs += BLOCK_SIZE_K * ldb
+    lda = tl.load(g_lds + g * 3)
+    ldb = tl.load(g_lds + g * 3 + 1)
+    ldc = tl.load(g_lds + g * 3 + 2)
+    if activation == 'float16':
+        a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
+        b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
+        c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
+    else:
+        a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
+        b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
+        c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
+
+    for fused_loop_cnt in tl.range(0, num_iters * k_tile_cnt):
+        # pick up a tile from the current gemm problem
+        kk = fused_loop_cnt % num_iters
+        
+        ## Loop epilogue. ##
+        if kk == 0:
+            tile_idx_in_gemm = tile_idx 
+            tile_m_idx = tile_idx_in_gemm // num_n_tiles
+            tile_n_idx = tile_idx_in_gemm % num_n_tiles
+
+            # do regular gemm here
+            offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            offs_am = tl.max_contiguous(offs_am, BLOCK_SIZE_M)
+            offs_bn = tl.max_contiguous(offs_bn, BLOCK_SIZE_N)
+            offs_k = tl.arange(0, BLOCK_SIZE_K)
+            a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
+            b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
+            accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+        
+        # hint to Triton compiler to do proper loop pipelining
+        # tl.multiple_of(a_ptrs, [16, 16])
+        # tl.multiple_of(b_ptrs, [16, 16])
+        # assume full tile for now
+        a = tl.load(a_ptrs, mask= \
+                    ## Question, what on earth goes in here? ##
+                    (offs_am[:, None] < gm)  \
+                    & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
+        b = tl.load(b_ptrs, mask = \
+                    (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
+                    & (offs_bn[None, :] < gn))
+        accumulator += tl.dot(a, b)
+        a_ptrs += BLOCK_SIZE_K
+        b_ptrs += BLOCK_SIZE_K * ldb
         c = accumulator.to(tl.float16)
 
-        offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-        offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-        c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
+        ## Loop prologue. ##
+        if kk == k_tile_cnt - 1:
+            offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
 
-        # assumes full tile for now
-        tl.store(c_ptrs, c, mask=\
-                 (offs_cm[:, None] < gm) \
-                 & (offs_cn[None, :] < gn))
+            tl.store(c_ptrs, c, mask=\
+                    (offs_cm[:, None] < gm) \
+                    & (offs_cn[None, :] < gn))
 
         # go to the next tile by advancing NUM_SM
         tile_idx += NUM_SM
-
 
 ## Group_a are tokens paced as [tokens routed to each expert, hidden_dimension].
 ## Group_B are experts packed as [num_experts, expert_hidden_dim]. -> hid_dim could differ between experts.
@@ -886,10 +891,10 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         d_g_lds,
         group_size,
         activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-        #BLOCK_SIZE_M=64,
-        #BLOCK_SIZE_N=64,
-        #BLOCK_SIZE_K=32,
-        #num_warps=4,
+        BLOCK_SIZE_M=64,
+        BLOCK_SIZE_N=64,
+        BLOCK_SIZE_K=32,
+        num_warps=4,
         NUM_SM=NUM_SM,
     )
 
@@ -907,9 +912,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. For debugging only. ##
-    #torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    #for g_out, t_out in zip(gemm_out, torch_out):
-    #    print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    # for g_out, t_out in zip(gemm_out, torch_out):
+    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 
