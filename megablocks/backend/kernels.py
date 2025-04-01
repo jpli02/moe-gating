@@ -696,6 +696,41 @@ def grouped_matmul_kernel(
         last_problem_end = last_problem_end + num_tiles
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 32,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 32,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 64,
+            'BLOCK_SIZE_K': 32,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 64,
+            'BLOCK_SIZE_K': 32,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 128,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 64,
+        }),
+        triton.Config({
+            'BLOCK_SIZE_M': 64,
+            'BLOCK_SIZE_N': 128,
+            'BLOCK_SIZE_K': 64,
+        }),
+    ],
+    key=['group_size'],
+)
 @triton.jit
 def grouped_matmul_kernel_opt(
     # device tensor of matrices pointers
@@ -752,6 +787,8 @@ def grouped_matmul_kernel_opt(
         # do regular gemm here
         offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
         offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+        offs_am = tl.max_contiguous(offs_am, BLOCK_SIZE_M)
+        offs_bn = tl.max_contiguous(offs_bn, BLOCK_SIZE_N)
         offs_k = tl.arange(0, BLOCK_SIZE_K)
         a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
         b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
@@ -839,7 +876,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #    NUM_SM=NUM_SM,
     #)
 
-    NUM_SM = 4096
+    NUM_SM = 128
     grid = (NUM_SM,group_size)
     grouped_matmul_kernel_opt[grid](
         d_a_ptrs,
@@ -849,10 +886,10 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         d_g_lds,
         group_size,
         activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-        BLOCK_SIZE_M=64,
-        BLOCK_SIZE_N=64,
-        BLOCK_SIZE_K=32,
-        num_warps=4,
+        #BLOCK_SIZE_M=64,
+        #BLOCK_SIZE_N=64,
+        #BLOCK_SIZE_K=32,
+        #num_warps=4,
         NUM_SM=NUM_SM,
     )
 
@@ -870,9 +907,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. For debugging only. ##
-    torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    for g_out, t_out in zip(gemm_out, torch_out):
-        print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    #torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    #for g_out, t_out in zip(gemm_out, torch_out):
+    #    print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 

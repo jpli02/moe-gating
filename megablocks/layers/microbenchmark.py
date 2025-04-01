@@ -22,14 +22,14 @@ def test_grouped_gemm(
 
     mlp = dmlp_registry.get(args)
     grads = torch.randn_like(inp)
-    for _ in range(10):
+    for _ in range(2):
         a = mlp(inp, [(cnt, ffn_hidden_size, hidden_dim) for cnt in token_dist])
         a.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     st = time.time()
 
-    for _ in range(10):
+    for _ in range(2):
         b = mlp(inp, [(cnt, ffn_hidden_size, hidden_dim) for cnt in token_dist])
         b.backward(grads, retain_graph=True)
 
@@ -67,14 +67,14 @@ def test_sequential_gemm(
     l_two_experts = [torch.randn((ffn_hidden_size, hidden_dim), dtype=dtype, device="cuda" if torch.cuda.is_available() else "cpu", requires_grad=True) for _ in range(num_experts)]
     activ_func = torch.nn.GELU(approximate="tanh")
 
-    for _ in range(5):
+    for _ in range(2):
         a = internal_gemm(token_inps, l_one_experts, l_two_experts, activ_func)
         a.backward(grads, retain_graph=True)
 
     torch.cuda.synchronize()
     st=time.time()
 
-    for _ in range(10):
+    for _ in range(2):
         b = internal_gemm(token_inps, l_one_experts, l_two_experts, activ_func)
         b.backward(grads, retain_graph=True)
 
@@ -109,7 +109,8 @@ def irregular_split(num_tokens: int, num_experts: int):
     return token_dist + [num_tokens - total_token_cnt]
 
 if __name__ == '__main__':
-    token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
+    #token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
+    token_cnt = [16384]
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
     #inner_dimensions = [(7168, 2048)]
     inner_dimensions = [(5120, 1536)]
