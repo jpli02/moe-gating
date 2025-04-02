@@ -747,7 +747,7 @@ def grouped_matmul_kernel_debug(
     k_tile_cnt = tl.cdiv(k, BLOCK_SIZE_K)
 
     ## We dump this here so that triton compiler doesn't compail. ##
-    tile_idx_in_gemm = tile_idx 
+    tile_idx_in_gemm = tile_idx
     tile_m_idx = tile_idx_in_gemm // num_n_tiles
     tile_n_idx = tile_idx_in_gemm % num_n_tiles
 
@@ -763,7 +763,7 @@ def grouped_matmul_kernel_debug(
         # figure out tile coordinates
         kk = loop_cnt % total_tile_cnt
         if kk == 0:
-            tile_idx_in_gemm = tile_idx 
+            tile_idx_in_gemm = tile_idx
             tile_m_idx = tile_idx_in_gemm // num_n_tiles
             tile_n_idx = tile_idx_in_gemm % num_n_tiles
 
@@ -892,10 +892,10 @@ def grouped_matmul_kernel_opt(
     for fused_loop_cnt in tl.range(0, num_iters * k_tile_cnt):
         # pick up a tile from the current gemm problem
         kk = fused_loop_cnt % num_iters
-        
+
         ## Loop epilogue. ##
         if kk == 0:
-            tile_idx_in_gemm = tile_idx 
+            tile_idx_in_gemm = tile_idx
             tile_m_idx = tile_idx_in_gemm // num_n_tiles
             tile_n_idx = tile_idx_in_gemm % num_n_tiles
 
@@ -908,7 +908,7 @@ def grouped_matmul_kernel_opt(
             a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
             b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
             accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-        
+
         # hint to Triton compiler to do proper loop pipelining
         # tl.multiple_of(a_ptrs, [16, 16])
         # tl.multiple_of(b_ptrs, [16, 16])
@@ -1008,7 +1008,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #    NUM_SM=NUM_SM,
     #)
 
-    NUM_SM = 128
+    NUM_SM = 64
     grid = (NUM_SM,group_size)
     grouped_matmul_kernel_debug[grid](
         d_a_ptrs,
