@@ -4,6 +4,7 @@
 import torch
 import triton
 import triton.language as tl
+import pdb
 
 
 def assert_is_tensor(x, ndim):
@@ -881,22 +882,22 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #    NUM_SM=NUM_SM,
     #)
 
-    NUM_SM = 128
-    grid = (NUM_SM,group_size)
-    grouped_matmul_kernel_opt[grid](
-        d_a_ptrs,
-        d_b_ptrs,
-        d_c_ptrs,
-        d_g_sizes,
-        d_g_lds,
-        group_size,
-        activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-        BLOCK_SIZE_M=64,
-        BLOCK_SIZE_N=64,
-        BLOCK_SIZE_K=32,
-        num_warps=4,
-        NUM_SM=NUM_SM,
-    )
+    #NUM_SM = 128
+    #grid = (NUM_SM,group_size)
+    #grouped_matmul_kernel_opt[grid](
+    #    d_a_ptrs,
+    #    d_b_ptrs,
+    #    d_c_ptrs,
+    #    d_g_sizes,
+    #    d_g_lds,
+    #    group_size,
+    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+    #    BLOCK_SIZE_M=64,
+    #    BLOCK_SIZE_N=64,
+    #    BLOCK_SIZE_K=32,
+    #    num_warps=4,
+    #    NUM_SM=NUM_SM,
+    #)
 
     return group_C
 
@@ -912,9 +913,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. For debugging only. ##
-    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    # for g_out, t_out in zip(gemm_out, torch_out):
-    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    for g_out, t_out in zip(gemm_out, torch_out):
+        print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 
@@ -927,11 +928,11 @@ if __name__ == '__main__':
         cum_size_a = 0
         for one, two, three in zip(ms, ns, ks):
             cum_size_a += one
-            b = torch.randn((three, two), dtype=ty, device="cuda" if torch.cuda.is_available() else "cpu")
+            b = torch.randn((three, two), dtype=ty, device="cpu" if torch.cuda.is_available() else "cpu")
             sizes.append((one, two, three))
             grp_B.append(b)
 
-        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
+        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cpu" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
 
 
     ## Since the most common case is expert_count = 4, we specifically test for that. ##
