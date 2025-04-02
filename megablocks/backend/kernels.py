@@ -659,6 +659,8 @@ def grouped_matmul_kernel(
             # do regular gemm here
             offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
             offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            offs_am = tl.max_contiguous(offs_am, BLOCK_SIZE_M)
+            offs_bn = tl.max_contiguous(offs_bn, BLOCK_SIZE_N)
             offs_k = tl.arange(0, BLOCK_SIZE_K)
             a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
             b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
@@ -973,23 +975,23 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     # we use a fixed number of CTA, and it's auto-tunable
     #grid = lambda META: (META['NUM_SM'], )
     #NUM_SM = 2048
-    #NUM_SM = 4096
     #NUM_SM=128
-    #grid = (NUM_SM,)
-    #grouped_matmul_kernel[grid](
-    #    d_a_ptrs,
-    #    d_b_ptrs,
-    #    d_c_ptrs,
-    #    d_g_sizes,
-    #    d_g_lds,
-    #    group_size,
-    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-    #    BLOCK_SIZE_M=64,
-    #    BLOCK_SIZE_N=64,
-    #    BLOCK_SIZE_K=32,
-    #    num_warps=4,
-    #    NUM_SM=NUM_SM,
-    #)
+    NUM_SM = 4096
+    grid = (NUM_SM,)
+    grouped_matmul_kernel[grid](
+        d_a_ptrs,
+        d_b_ptrs,
+        d_c_ptrs,
+        d_g_sizes,
+        d_g_lds,
+        group_size,
+        activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+        BLOCK_SIZE_M=64,
+        BLOCK_SIZE_N=64,
+        BLOCK_SIZE_K=32,
+        num_warps=4,
+        NUM_SM=NUM_SM,
+    )
 
     #NUM_SM = 128
     #grid = (NUM_SM,group_size)
@@ -1008,22 +1010,22 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #    NUM_SM=NUM_SM,
     #)
 
-    NUM_SM = 64
-    grid = (NUM_SM,group_size)
-    grouped_matmul_kernel_debug[grid](
-        d_a_ptrs,
-        d_b_ptrs,
-        d_c_ptrs,
-        d_g_sizes,
-        d_g_lds,
-        group_size,
-        activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-        BLOCK_SIZE_M=64,
-        BLOCK_SIZE_N=64,
-        BLOCK_SIZE_K=32,
-        num_warps=4,
-        NUM_SM=NUM_SM,
-    )
+    #NUM_SM = 64
+    #grid = (NUM_SM,group_size)
+    #grouped_matmul_kernel_debug[grid](
+    #    d_a_ptrs,
+    #    d_b_ptrs,
+    #    d_c_ptrs,
+    #    d_g_sizes,
+    #    d_g_lds,
+    #    group_size,
+    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+    #    BLOCK_SIZE_M=64,
+    #    BLOCK_SIZE_N=64,
+    #    BLOCK_SIZE_K=32,
+    #    num_warps=4,
+    #    NUM_SM=NUM_SM,
+    #)
 
     return group_C
 

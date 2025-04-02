@@ -109,11 +109,11 @@ def irregular_split(num_tokens: int, num_experts: int):
     return token_dist + [num_tokens - total_token_cnt]
 
 if __name__ == '__main__':
-    token_cnt = [1024, 2048, 4096, 8192, 16384, 32768]
+    token_cnt = [1024]
     #token_cnt = [1024, 2048, 4096, 16384, 32768, 16384]
     #inner_dimensions = [(2048, 1408), (5120, 1536), (7168, 2048)]
-    inner_dimensions = [(7168, 2048)]
-    #inner_dimensions = [(5120, 1536)]
+    #inner_dimensions = [(7168, 2048)]
+    inner_dimensions = [(5120, 1536)]
     #inner_dimensions = [(2048, 1408)]
     args = Arguments()
     num_experts = 32
