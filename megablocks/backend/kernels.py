@@ -730,65 +730,79 @@ def grouped_matmul_kernel_debug(
     num_m_tiles = tl.cdiv(gm, BLOCK_SIZE_M)
     num_n_tiles = tl.cdiv(gn, BLOCK_SIZE_N)
     num_tiles = num_m_tiles * num_n_tiles
-    # iterate through the tiles in the current gemm problem
-    while (tile_idx >= last_problem_end and tile_idx < last_problem_end + num_tiles):
-        # pick up a tile from the current gemm problem
-        k = gk
-        lda = tl.load(g_lds + g * 3)
-        ldb = tl.load(g_lds + g * 3 + 1)
-        ldc = tl.load(g_lds + g * 3 + 2)
-        if activation == 'float16':
-            a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
-            b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
-            c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
-        else:
-            a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
-            b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
-            c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
+    k = gk
+    lda = tl.load(g_lds + g * 3)
+    ldb = tl.load(g_lds + g * 3 + 1)
+    ldc = tl.load(g_lds + g * 3 + 2)
+    if activation == 'float16':
+        a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float16))
+        b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float16))
+        c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float16))
+    else:
+        a_ptr = tl.load(group_a_ptrs + g).to(tl.pointer_type(tl.float32))
+        b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
+        c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
+
+    total_tile_cnt = tl.cdiv(num_tiles, NUM_SM)
+    k_tile_cnt = tl.cdiv(k, BLOCK_SIZE_K)
+
+    ## We dump this here so that triton compiler doesn't compail. ##
+    tile_idx_in_gemm = tile_idx 
+    tile_m_idx = tile_idx_in_gemm // num_n_tiles
+    tile_n_idx = tile_idx_in_gemm % num_n_tiles
+
+    offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+    offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+    offs_k = tl.arange(0, BLOCK_SIZE_K)
+    a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
+    b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
+    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+    ## End dump, this will be overwritten. ##
+
+    for loop_cnt in tl.range(0, total_tile_cnt*k_tile_cnt, num_stages=4):
         # figure out tile coordinates
-        tile_idx_in_gemm = tile_idx - last_problem_end
-        tile_m_idx = tile_idx_in_gemm // num_n_tiles
-        tile_n_idx = tile_idx_in_gemm % num_n_tiles
+        kk = loop_cnt % total_tile_cnt
+        if kk == 0:
+            tile_idx_in_gemm = tile_idx 
+            tile_m_idx = tile_idx_in_gemm // num_n_tiles
+            tile_n_idx = tile_idx_in_gemm % num_n_tiles
 
-        # do regular gemm here
-        offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-        offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-        offs_k = tl.arange(0, BLOCK_SIZE_K)
-        a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
-        b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
-        accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-        #for kk in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
-        for kk in tl.range(0, tl.cdiv(k, BLOCK_SIZE_K)):
-            # hint to Triton compiler to do proper loop pipelining
-            # tl.multiple_of(a_ptrs, [16, 16])
-            # tl.multiple_of(b_ptrs, [16, 16])
-            # assume full tile for now
-            a = tl.load(a_ptrs, mask= \
-                        ## Question, what on earth goes in here? ##
-                        (offs_am[:, None] < gm)  \
-                        & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
-            b = tl.load(b_ptrs, mask = \
-                        (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
-                        & (offs_bn[None, :] < gn))
-            accumulator += tl.dot(a, b)
-            a_ptrs += BLOCK_SIZE_K
-            b_ptrs += BLOCK_SIZE_K * ldb
-        c = accumulator.to(tl.float16)
+            # do regular gemm here
+            offs_am = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_bn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            offs_k = tl.arange(0, BLOCK_SIZE_K)
+            a_ptrs = a_ptr + offs_am[:, None] * lda + offs_k[None, :]
+            b_ptrs = b_ptr + offs_k[:, None] * ldb + offs_bn[None, :]
+            accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+        # hint to Triton compiler to do proper loop pipelining
+        # tl.multiple_of(a_ptrs, [16, 16])
+        # tl.multiple_of(b_ptrs, [16, 16])
+        # assume full tile for now
+        a = tl.load(a_ptrs, mask= \
+                    ## Question, what on earth goes in here? ##
+                    (offs_am[:, None] < gm)  \
+                    & (offs_k[None, :] + kk*BLOCK_SIZE_K < k))
+        b = tl.load(b_ptrs, mask = \
+                    (offs_k[:, None] + kk*BLOCK_SIZE_K < k) \
+                    & (offs_bn[None, :] < gn))
+        accumulator += tl.dot(a, b)
+        a_ptrs += BLOCK_SIZE_K
+        b_ptrs += BLOCK_SIZE_K * ldb
 
-        offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-        offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-        c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
+        if kk == k_tile_cnt - 1:
+            c = accumulator.to(tl.float16)
 
-        # assumes full tile for now
-        tl.store(c_ptrs, c, mask=\
-                 (offs_cm[:, None] < gm) \
-                 & (offs_cn[None, :] < gn))
+            offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
+            offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
 
-        # go to the next tile by advancing NUM_SM
-        tile_idx += NUM_SM
+            # assumes full tile for now
+            tl.store(c_ptrs, c, mask=\
+                     (offs_cm[:, None] < gm) \
+                     & (offs_cn[None, :] < gn))
 
-    # get ready to go to the next gemm problem
-    last_problem_end = last_problem_end + num_tiles
+            # go to the next tile by advancing NUM_SM
+            tile_idx += NUM_SM
 
 
 # @triton.autotune(
@@ -960,6 +974,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #grid = lambda META: (META['NUM_SM'], )
     #NUM_SM = 2048
     #NUM_SM = 4096
+    #NUM_SM=128
     #grid = (NUM_SM,)
     #grouped_matmul_kernel[grid](
     #    d_a_ptrs,
@@ -1024,9 +1039,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. For debugging only. ##
-    torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    for g_out, t_out in zip(gemm_out, torch_out):
-        print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    # for g_out, t_out in zip(gemm_out, torch_out):
+    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 
@@ -1039,11 +1054,11 @@ if __name__ == '__main__':
         cum_size_a = 0
         for one, two, three in zip(ms, ns, ks):
             cum_size_a += one
-            b = torch.randn((three, two), dtype=ty, device="cpu" if torch.cuda.is_available() else "cpu")
+            b = torch.randn((three, two), dtype=ty, device="cuda" if torch.cuda.is_available() else "cpu")
             sizes.append((one, two, three))
             grp_B.append(b)
 
-        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cpu" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
+        return grouped_gemm(torch.randn(cum_size_a, ks[0], device="cuda" if torch.cuda.is_available() else "cpu", dtype=ty), grp_B, sizes)
 
 
     ## Since the most common case is expert_count = 4, we specifically test for that. ##
