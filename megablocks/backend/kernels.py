@@ -976,7 +976,7 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #grid = lambda META: (META['NUM_SM'], )
     #NUM_SM = 2048
     #NUM_SM=128
-    NUM_SM = 4096
+    NUM_SM = 2048
     grid = (NUM_SM,)
     grouped_matmul_kernel[grid](
         d_a_ptrs,
