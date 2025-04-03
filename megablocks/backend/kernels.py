@@ -685,6 +685,8 @@ def grouped_matmul_kernel(
 
             offs_cm = tile_m_idx * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
             offs_cn = tile_n_idx * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+            offs_cm = tl.max_contiguous(offs_cm, BLOCK_SIZE_M)
+            offs_cn = tl.max_contiguous(offs_cn, BLOCK_SIZE_N)
             c_ptrs = c_ptr + ldc * offs_cm[:, None] + offs_cn[None, :]
 
             # assumes full tile for now
@@ -837,7 +839,7 @@ def grouped_matmul_kernel_debug(
         b_ptr = tl.load(group_b_ptrs + g).to(tl.pointer_type(tl.float32))
         c_ptr = tl.load(group_c_ptrs + g).to(tl.pointer_type(tl.float32))
 
-    total_tile_cnt = tl.cdiv(num_tiles, NUM_SM)
+    total_tile_cnt = tl.cdiv(num_tiles - tile_idx, NUM_SM)
     k_tile_cnt = tl.cdiv(k, BLOCK_SIZE_K)
 
     ## We dump this here so that triton compiler doesn't compail. ##
@@ -1068,22 +1070,22 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #grid = lambda META: (META['NUM_SM'], )
     #NUM_SM = 2048
     #NUM_SM=128
-    NUM_SM = 2048
-    grid = (NUM_SM,)
-    grouped_matmul_kernel[grid](
-        d_a_ptrs,
-        d_b_ptrs,
-        d_c_ptrs,
-        d_g_sizes,
-        d_g_lds,
-        group_size,
-        activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-        BLOCK_SIZE_M=64,
-        BLOCK_SIZE_N=64,
-        BLOCK_SIZE_K=32,
-        num_warps=4,
-        NUM_SM=NUM_SM,
-    )
+    #NUM_SM = 2048
+    #grid = (NUM_SM,)
+    #grouped_matmul_kernel[grid](
+    #    d_a_ptrs,
+    #    d_b_ptrs,
+    #    d_c_ptrs,
+    #    d_g_sizes,
+    #    d_g_lds,
+    #    group_size,
+    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+    #    BLOCK_SIZE_M=64,
+    #    BLOCK_SIZE_N=64,
+    #    BLOCK_SIZE_K=32,
+    #    num_warps=4,
+    #    NUM_SM=NUM_SM,
+    #)
 
     #NUM_SM = 128
     #grid = (NUM_SM,group_size)
@@ -1102,26 +1104,9 @@ def group_gemm_fn(group_A, group_B, DEVICE):
     #    NUM_SM=NUM_SM,
     #)
 
-    #NUM_SM = 64
-    #grid = (NUM_SM,group_size)
-    #grouped_matmul_kernel_debug[grid](
-    #    d_a_ptrs,
-    #    d_b_ptrs,
-    #    d_c_ptrs,
-    #    d_g_sizes,
-    #    d_g_lds,
-    #    group_size,
-    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
-    #    BLOCK_SIZE_M=64,
-    #    BLOCK_SIZE_N=64,
-    #    BLOCK_SIZE_K=32,
-    #    num_warps=4,
-    #    NUM_SM=NUM_SM,
-    #)
-
-    NUM_SM = 4096 // group_size
+    NUM_SM = 256
     grid = (NUM_SM,group_size)
-    grouped_matmul_kernel_par_batch[grid](
+    grouped_matmul_kernel_debug[grid](
         d_a_ptrs,
         d_b_ptrs,
         d_c_ptrs,
@@ -1135,6 +1120,23 @@ def group_gemm_fn(group_A, group_B, DEVICE):
         num_warps=4,
         NUM_SM=NUM_SM,
     )
+
+    #NUM_SM = 512
+    #grid = (NUM_SM,group_size)
+    #grouped_matmul_kernel_par_batch[grid](
+    #    d_a_ptrs,
+    #    d_b_ptrs,
+    #    d_c_ptrs,
+    #    d_g_sizes,
+    #    d_g_lds,
+    #    group_size,
+    #    activation="float16" if group_A[0].dtype == torch.float16  else "float32",
+    #    BLOCK_SIZE_M=64,
+    #    BLOCK_SIZE_N=64,
+    #    BLOCK_SIZE_K=32,
+    #    num_warps=4,
+    #    NUM_SM=NUM_SM,
+    #)
 
     return group_C
 
@@ -1150,9 +1152,9 @@ def grouped_gemm(x: torch.Tensor, w: torch.Tensor,
     gemm_out = group_gemm_fn(x, w, x[0].device)
     ## This is for debugging only, remove once finished. ##
     ## We compare against pytorch ground-truth. For debugging only. ##
-    # torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
-    # for g_out, t_out in zip(gemm_out, torch_out):
-    #     print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
+    #torch_out = [torch.matmul(xi, wi) for xi, wi in zip(x, w)]
+    #for g_out, t_out in zip(gemm_out, torch_out):
+    #    print(f'largest delta: {torch.abs(g_out - t_out).max().item()}')
     return torch.cat(gemm_out, dim=0)
 
 
